@@ -133,13 +133,13 @@ download-desktop-edition = 下载桌面客户端
 </fluent>
 
 <fluent locale="zh-TW">
-greeting = 
+greeting =
     { $time ->
         [beforedawn] 日出東方隈，似從地底來
-        [morning] 早上好
-        [noon] 中午好
-        [afternoon] 下午好
-        [evening] 晚上好
+        [morning] 早安
+        [noon] 午安
+        [afternoon] 午安
+        [evening] 晚安
         [night] 夜深了
         *[other] 很高興見到你
     }
