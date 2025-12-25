@@ -43,8 +43,15 @@ jobs:
           toolchain: nightly
           targets: wasm32-unknown-unknown
 
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-wasm -> target"
+
       - name: Install wasm-pack
-        run: npm install -g wasm-pack wasm-bindgen-cli
+        uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: 'latest'
 
       - name: Install dependencies
         run: pnpm install
