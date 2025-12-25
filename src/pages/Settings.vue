@@ -219,14 +219,6 @@ function fixDataSourceLanguage() {
             <el-form-item :label="$t('developer')">
                 {{ E1.c() ? E1.t3 : 'Tnze' }}
             </el-form-item>
-            <el-form-item :label="$t('feedback')">
-                <el-link @click="openUrl('https://pd.qq.com/s/al6b5xo69')">
-                    QQ频道
-                </el-link>
-                <el-link @click="openUrl('https://qm.qq.com/q/YMujBifn6G')">
-                    QQ群聊
-                </el-link>
-            </el-form-item>
             <el-form-item :label="$t('source')">
                 <el-link
                     @click="openUrl('https://gitee.com/Tnze/ffxiv-best-craft')"

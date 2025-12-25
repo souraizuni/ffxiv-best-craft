@@ -17,12 +17,10 @@
 -->
 
 <script setup lang="ts">
-import { ElText, ElButton, ElLink, ElDialog } from 'element-plus';
+import { ElText, ElButton } from 'element-plus';
 import { computed, onActivated, ref } from 'vue';
 import { useFluent } from 'fluent-vue';
-import { isWebsite, isYYYYGames } from '@/libs/Consts';
 import E1 from '@/eastereggs/e1';
-import DesktopEditionDownload from '@/components/DesktopEditionDownload.vue';
 
 const emit = defineEmits<{
     (e: 'setTitle', title: string): void;
@@ -43,18 +41,10 @@ const time = computed<
     else if (hour >= 19 && hour < 21) return 'evening';
     else return 'night';
 });
-const showDesktopEditionDownload = ref(false);
 </script>
 
 <template>
     <div class="container">
-        <el-dialog
-            v-if="isWebsite"
-            v-model="showDesktopEditionDownload"
-            :title="$t('download-desktop-edition')"
-        >
-            <DesktopEditionDownload />
-        </el-dialog>
         <div class="greeting-box">
             <el-text class="greeting">
                 {{ cks ? cks : $t('welcome', { time }) }}
@@ -76,22 +66,7 @@ const showDesktopEditionDownload = ref(false);
             >
                 {{ E1.t1 }}
             </el-button>
-            <el-button
-                v-if="isWebsite"
-                size="large"
-                @click="showDesktopEditionDownload = true"
-            >
-                {{ $t('download-desktop-edition') }}
-            </el-button>
         </div>
-        <el-link
-            v-if="isWebsite && isYYYYGames"
-            target="_blank"
-            href="https://beian.miit.gov.cn/"
-            type="info"
-        >
-            粤ICP备2021156196号-1
-        </el-link>
         <el-text class="info-text" type="info">
             {{ $t('copyright-notices') }}
         </el-text>

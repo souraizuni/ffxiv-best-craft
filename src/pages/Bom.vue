@@ -329,6 +329,15 @@ clear = 清空
 display-relations = 显示依赖关系
 </fluent>
 
+<fluent locale="zh-TW">
+ings = 材料
+calculating = 計算中
+fetching-item = 正在查詢 { $itemName }
+add = 新增
+clear = 清空
+display-relations = 顯示相依關係
+</fluent>
+
 <fluent locale="en-US">
 ings = Ingredients
 calculating = Calculating
