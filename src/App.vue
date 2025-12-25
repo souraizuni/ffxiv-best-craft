@@ -33,7 +33,7 @@ import {
 } from 'element-plus';
 import { Operation } from '@element-plus/icons-vue';
 import { useFluent } from 'fluent-vue';
-import { isTauri, isWebsite } from './libs/Consts';
+import { isTauri } from './libs/Consts';
 if (isTauri) {
     var pkgTauriFs = import('@tauri-apps/plugin-fs');
     var pkgTauri = import('@tauri-apps/api/core');
@@ -47,7 +47,6 @@ import useDesignerStore from '@/stores/designer';
 import { elementPlusLang, languages } from './lang';
 import { selectLanguage } from './fluent';
 import { useRouter } from 'vue-router';
-import DesktopEditionDownload from './components/DesktopEditionDownload.vue';
 
 const { $t } = useFluent();
 const colorMode = useColorMode();
@@ -59,7 +58,6 @@ const bgColor = useCssVar('--app-bg-color', ref(null));
 const bgMainColor = useCssVar('--tnze-main-bg-color', ref(null));
 
 const router = useRouter();
-const showDesktopEditionDownload = ref(false);
 const showMenu = ref(false);
 const topTitle = ref('');
 const unfoldSidebar = useMediaQuery('screen and (min-width: 760px)');
@@ -174,13 +172,6 @@ watchEffect(async () => {
 
 <template>
     <el-config-provider :locale="elementPlusLang.get(lang)">
-        <el-dialog
-            v-if="isWebsite"
-            v-model="showDesktopEditionDownload"
-            :title="$t('download-desktop-edition')"
-        >
-            <DesktopEditionDownload />
-        </el-dialog>
         <div class="container">
             <Transition>
                 <div
@@ -191,14 +182,6 @@ watchEffect(async () => {
             </Transition>
             <div class="sidebar" v-bind:class="{ 'show-menu': showMenu }">
                 <Menu></Menu>
-                <div v-if="isWebsite" class="download-desktop-link">
-                    <el-link
-                        @click="showDesktopEditionDownload = true"
-                        type="info"
-                    >
-                        {{ $t('download-desktop-edition') }}
-                    </el-link>
-                </div>
             </div>
             <div class="main">
                 <div class="topbar">
@@ -362,11 +345,6 @@ watchEffect(async () => {
     transform: translateX(0);
 }
 
-.download-desktop-link {
-    padding: 10px 6px;
-    text-align: center;
-}
-
 .topbar {
     height: var(--tnze-topbar-height);
     width: 100%;
@@ -416,20 +394,16 @@ watchEffect(async () => {
 
 <fluent locale="zh-CN">
 error-save-file = 保存文件 { $file } 失败：{ $err }
-download-desktop-edition = 下载桌面客户端
 </fluent>
 
 <fluent locale="zh-TW">
 error-save-file = 儲存檔案 { $file } 失敗：{ $err }
-download-desktop-edition = 下載桌面客戶端
 </fluent>
 
 <fluent locale="en-US">
 error-save-file = Failed when saving { $file }: { $err }
-download-desktop-edition = Download Desktop Edition
 </fluent>
 
 <fluent locale="ja-JP">
 error-save-file = ファイル { $file } の保存に失敗しました: { $err }
-download-desktop-edition = デスクトップ版のダウンロード
 </fluent>
