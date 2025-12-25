@@ -40,12 +40,31 @@ if (!isTauri) {
     dataSourceList.delete('local');
 }
 
+// 根據瀏覽器語言決定預設資料來源語言
+function getDefaultDataSourceLang(): DataSourceLangID {
+    const browserLang = navigator.language || 'zh-CN';
+    if (browserLang.startsWith('zh-TW') || browserLang.startsWith('zh-Hant')) {
+        return 'zh-TW';
+    } else if (browserLang.startsWith('zh')) {
+        return 'zh-CN';
+    } else if (browserLang.startsWith('ja')) {
+        return 'ja';
+    } else if (browserLang.startsWith('en')) {
+        return 'en';
+    } else if (browserLang.startsWith('de')) {
+        return 'de';
+    } else if (browserLang.startsWith('fr')) {
+        return 'fr';
+    }
+    // 預設為繁體中文
+    return 'zh-TW';
+}
+
 export default defineStore('settings', {
     state: () => ({
         language: 'system',
         dataSource: dataSourceList.keys().next().value!,
-        dataSourceLang: dataSourceList.values().next().value?.values().next()
-            .value,
+        dataSourceLang: getDefaultDataSourceLang(),
     }),
     getters: {
         toJson(): string {
@@ -122,6 +141,10 @@ export default defineStore('settings', {
                     this.dataSourceLang = 'en';
                 } else if (this.language.startsWith('ja')) {
                     this.dataSourceLang = 'ja';
+                } else if (this.language.startsWith('zh-TW') || this.language.startsWith('zh-Hant')) {
+                    this.dataSourceLang = 'zh-TW';
+                } else if (this.language.startsWith('zh')) {
+                    this.dataSourceLang = 'zh-CN';
                 }
             }
         },

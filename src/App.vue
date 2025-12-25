@@ -65,12 +65,12 @@ const topTitle = ref('');
 const unfoldSidebar = useMediaQuery('screen and (min-width: 760px)');
 watch(router.currentRoute, () => (showMenu.value = false));
 
-const lang = ref('zh-CN');
+const lang = ref('zh-TW');
 watchEffect(() => {
     let settingLang: string | null = settingsStore.language;
     if (settingLang == 'system') settingLang = null;
     const systemLang = preferredLang.value.find(v => languages.has(v));
-    lang.value = settingLang ?? systemLang ?? 'zh-CN';
+    lang.value = settingLang ?? systemLang ?? 'zh-TW';
     selectLanguage(lang.value);
 });
 
