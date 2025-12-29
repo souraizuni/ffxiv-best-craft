@@ -53,6 +53,7 @@ import AttrEnhSelector from './tabs/AttrEnhSelector.vue';
 import InitialQualitySetting from './tabs/InitialQualitySetting.vue';
 import MacroExporter from './tabs/MacroExporter.vue';
 import MacroImporter from './tabs/MacroImporter.vue';
+import CostCalculator from './tabs/CostCalculator.vue';
 
 import ActionPanel from './ActionPanel.vue';
 import ActionQueue from './ActionQueue.vue';
@@ -450,6 +451,19 @@ async function handleSolverResult(
                             />
                         </el-scrollbar>
                     </el-tab-pane>
+                    <el-tab-pane
+                        :label="$t('cost-calculator')"
+                        name="cost-calculator"
+                        class="multi-function-area"
+                    >
+                        <el-scrollbar style="flex: auto">
+                            <CostCalculator
+                                :equipment-id="item.id.toString()"
+                                :equipment-name="item.name"
+                                :recipe-id="recipeId"
+                            />
+                        </el-scrollbar>
+                    </el-tab-pane>
                 </el-tabs>
             </div>
         </div>
@@ -545,6 +559,7 @@ init-quality = 初期品质
 store = 储存
 analyzer = 分析
 action-panel = 技能面板
+cost-calculator = 成本
 
 waring = 警告
 
@@ -573,6 +588,7 @@ init-quality = 初期品質
 store = 儲存
 analyzer = 分析
 action-panel = 技能面板
+cost-calculator = 成本
 
 waring = 警告
 
@@ -601,6 +617,7 @@ init-quality = Quality
 store = Store
 analyzer = Analyzer
 action-panel = Action Panel
+cost-calculator = Cost
 
 waring = Warning
 
@@ -632,6 +649,7 @@ attributes-requirements = Require: craftsmanship ≥ { $craftsmanship } and cont
 <fluent locale="ja-JP">
 attributes-enhance = 薬品・調理品
 init-quality = 初期品質
+cost-calculator = コスト
 and = { $a }と{ $b }
 attributes-do-not-meet-the-requirements = { $attribute }が足りないため
 attributes-requirements = 製作可能条件：{ craftsmanship }{ $craftsmanship}以上 と { control }{ $control }以上
