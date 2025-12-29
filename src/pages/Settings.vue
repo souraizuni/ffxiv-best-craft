@@ -17,7 +17,7 @@
 -->
 
 <script setup lang="ts">
-import { ref, onActivated } from 'vue';
+import { ref, onActivated, onMounted } from 'vue';
 import {
     ElScrollbar,
     ElForm,
@@ -30,9 +30,15 @@ import {
     ElRadioButton,
     ElDialog,
     ElText,
+    ElDivider,
+    ElAvatar,
+    ElAlert,
+    ElCard,
 } from 'element-plus';
 import { useFluent } from 'fluent-vue';
 import useSettingsStore, { dataSourceList } from '@/stores/settings';
+import { useAuthStore } from '@/stores/auth';
+import { useCloudSyncStore } from '@/stores/cloud-sync';
 import { languages } from '../lang';
 import { useColorMode } from '@vueuse/core';
 import { isTauri, isWebsite, isYYYYGames } from '@/libs/Consts';
@@ -47,7 +53,15 @@ onActivated(() => emit('setTitle', 'settings'));
 
 const { $t } = useFluent();
 const store = useSettingsStore();
+const authStore = useAuthStore();
+const cloudSyncStore = useCloudSyncStore();
 const colorMode = useColorMode().store;
+
+// 初始化認證
+onMounted(() => {
+    authStore.initAuth();
+    cloudSyncStore.setupAutoSync();
+});
 
 const appName = ref('BestCraft');
 const version = ref('');
@@ -85,11 +99,125 @@ function fixDataSourceLanguage() {
         store.dataSourceLang = dsLangAllowedList[0];
     }
 }
+
+// Google 登入
+async function handleGoogleSignIn() {
+    await authStore.signInWithGoogle();
+}
+
+// 登出
+async function handleSignOut() {
+    await authStore.signOut();
+}
+
+// 上傳到雲端
+async function handleUploadToCloud() {
+    await cloudSyncStore.uploadToCloud();
+}
+
+// 從雲端下載
+async function handleDownloadFromCloud() {
+    await cloudSyncStore.downloadFromCloud();
+}
 </script>
 
 <template>
     <el-scrollbar>
         <el-form class="setting-page" label-width="120px">
+            <!-- 雲端同步區塊 -->
+            <el-card class="cloud-sync-card" v-if="authStore.isFirebaseEnabled">
+                <template #header>
+                    <span>{{ $t('cloud-sync') }}</span>
+                </template>
+                
+                <!-- 錯誤提示 -->
+                <el-alert
+                    v-if="authStore.error"
+                    :title="authStore.error"
+                    type="error"
+                    show-icon
+                    :closable="true"
+                    @close="authStore.clearError()"
+                    style="margin-bottom: 15px;"
+                />
+                <el-alert
+                    v-if="cloudSyncStore.syncStatus.error"
+                    :title="cloudSyncStore.syncStatus.error"
+                    type="error"
+                    show-icon
+                    :closable="true"
+                    @close="cloudSyncStore.clearError()"
+                    style="margin-bottom: 15px;"
+                />
+
+                <!-- 未登入狀態 -->
+                <div v-if="!authStore.isLoggedIn" class="login-section">
+                    <el-text type="info">{{ $t('login-hint') }}</el-text>
+                    <el-button
+                        type="primary"
+                        @click="handleGoogleSignIn"
+                        :loading="authStore.loading"
+                        style="margin-top: 10px;"
+                    >
+                        {{ $t('sign-in-with-google') }}
+                    </el-button>
+                </div>
+
+                <!-- 已登入狀態 -->
+                <div v-else class="user-section">
+                    <div class="user-info">
+                        <el-avatar
+                            :src="authStore.user?.photoURL || undefined"
+                            :size="48"
+                        />
+                        <div class="user-details">
+                            <el-text tag="b">{{ authStore.user?.displayName }}</el-text>
+                            <el-text type="info" size="small">{{ authStore.user?.email }}</el-text>
+                        </div>
+                    </div>
+                    
+                    <el-divider />
+                    
+                    <div class="sync-actions">
+                        <el-button
+                            type="primary"
+                            @click="handleUploadToCloud"
+                            :loading="cloudSyncStore.syncStatus.syncing"
+                        >
+                            {{ $t('upload-to-cloud') }}
+                        </el-button>
+                        <el-button
+                            @click="handleDownloadFromCloud"
+                            :loading="cloudSyncStore.syncStatus.syncing"
+                        >
+                            {{ $t('download-from-cloud') }}
+                        </el-button>
+                    </div>
+                    
+                    <el-text
+                        v-if="cloudSyncStore.syncStatus.lastSyncTime"
+                        type="info"
+                        size="small"
+                        style="margin-top: 10px; display: block;"
+                    >
+                        {{ $t('last-sync') }}: {{ cloudSyncStore.syncStatus.lastSyncTime.toLocaleString() }}
+                    </el-text>
+                    
+                    <el-divider />
+                    
+                    <el-button
+                        type="danger"
+                        plain
+                        @click="handleSignOut"
+                        :loading="authStore.loading"
+                    >
+                        {{ $t('sign-out') }}
+                    </el-button>
+                </div>
+            </el-card>
+
+            <el-divider v-if="authStore.isFirebaseEnabled" />
+
             <el-form-item :label="$t('language')">
                 <el-select v-model="store.language">
                     <el-option :label="$t('system-lang')" value="system" />
@@ -270,6 +398,39 @@ function fixDataSourceLanguage() {
     color: var(--el-text-color-secondary);
     font-size: 13px;
 }
+
+.cloud-sync-card {
+    margin: 0 20px 20px 20px;
+}
+
+.login-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+}
+
+.user-section {
+    padding: 10px;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sync-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
 </style>
 
 <fluent locale="zh-CN">
@@ -305,6 +466,14 @@ detail = 详情
 
 check-update = 检查更新
 checking-update = 正在检查更新
+
+cloud-sync = 云端同步
+login-hint = 登录 Google 账号以同步您的设置和数据
+sign-in-with-google = 使用 Google 登录
+sign-out = 登出
+upload-to-cloud = 上传到云端
+download-from-cloud = 从云端下载
+last-sync = 上次同步
 </fluent>
 
 <fluent locale="zh-TW">
@@ -340,6 +509,14 @@ detail = 詳情
 
 check-update = 檢查更新
 checking-update = 正在檢查更新
+
+cloud-sync = 雲端同步
+login-hint = 登入 Google 帳號以同步您的設定和資料
+sign-in-with-google = 使用 Google 登入
+sign-out = 登出
+upload-to-cloud = 上傳到雲端
+download-from-cloud = 從雲端下載
+last-sync = 上次同步
 </fluent>
 
 <fluent locale="en-US">
@@ -374,6 +551,14 @@ detail = Detail
 
 check-update = Check Update
 checking-update = Checking Update
+
+cloud-sync = Cloud Sync
+login-hint = Sign in with Google to sync your settings and data
+sign-in-with-google = Sign in with Google
+sign-out = Sign Out
+upload-to-cloud = Upload to Cloud
+download-from-cloud = Download from Cloud
+last-sync = Last Sync
 </fluent>
 
 <fluent locale="ja-JP">
@@ -400,4 +585,12 @@ detail = 詳細
 
 check-update = 更新のチェック
 checking-update = 更新をチェックしています
+
+cloud-sync = クラウド同期
+login-hint = Google アカウントでログインして設定とデータを同期します
+sign-in-with-google = Google でログイン
+sign-out = ログアウト
+upload-to-cloud = クラウドにアップロード
+download-from-cloud = クラウドからダウンロード
+last-sync = 最終同期
 </fluent>
