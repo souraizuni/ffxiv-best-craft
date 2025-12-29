@@ -20,7 +20,8 @@ export interface MaterialCost {
     materialId: number;
     materialName: string;
     price: number;
-    quantity: number;
+    quantity: number; // 購買/擁有的數量
+    requiredPerCraft: number; // 每次製作需要的數量
     includeTax: boolean;
 }
 
@@ -87,6 +88,7 @@ export default defineStore('simulator-costs', {
             materialName: string,
             price: number,
             quantity: number,
+            requiredPerCraft: number,
             includeTax: boolean,
         ) {
             const costData = this.getOrCreateEquipmentCost(equipmentId);
@@ -99,6 +101,7 @@ export default defineStore('simulator-costs', {
                 materialName,
                 price,
                 quantity,
+                requiredPerCraft,
                 includeTax,
             };
 
@@ -170,6 +173,32 @@ export default defineStore('simulator-costs', {
         // 清除裝備的所有成本資料
         clearEquipmentCost(equipmentId: string) {
             this.costs.delete(equipmentId);
+        },
+
+        // 計算可製作數量（根據材料庫存和每次製作需求量）
+        calculateCraftableAmount(equipmentId: string): number {
+            const costData = this.costs.get(equipmentId);
+            if (!costData || costData.materials.length === 0) return 0;
+
+            // 找出每種材料可以製作的數量，取最小值
+            const craftableAmounts = costData.materials
+                .filter((m: MaterialCost) => m.requiredPerCraft > 0)
+                .map((m: MaterialCost) => Math.floor(m.quantity / m.requiredPerCraft));
+
+            if (craftableAmounts.length === 0) return 0;
+            return Math.min(...craftableAmounts);
+        },
+
+        // 計算單個成品的成本
+        calculateCostPerCraft(equipmentId: string): number {
+            const costData = this.costs.get(equipmentId);
+            if (!costData || costData.materials.length === 0) return 0;
+
+            // 計算每次製作的材料成本
+            return costData.materials.reduce((total: number, material: MaterialCost) => {
+                const materialCostPerUnit = material.price * (material.includeTax ? 1 : (1 + costData.taxRate / 100));
+                return total + materialCostPerUnit * material.requiredPerCraft;
+            }, 0);
         },
     },
 });

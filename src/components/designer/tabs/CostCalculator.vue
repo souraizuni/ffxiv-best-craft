@@ -87,17 +87,19 @@ async function loadRecipeIngredients() {
                     ing.ingredient_id,
                     itemInfo.name,
                     0, // 預設價格為 0，需要使用者輸入
-                    ing.amount,
+                    0, // 預設購買數量為 0
+                    ing.amount, // 配方需求量
                     false, // 預設不含稅
                 );
             } else {
-                // 更新數量（保留使用者輸入的價格）
+                // 更新配方需求量（保留使用者輸入的價格和數量）
                 store.updateMaterialCost(
                     props.equipmentId,
                     existingMaterial.materialId,
                     existingMaterial.materialName,
                     existingMaterial.price,
-                    ing.amount, // 使用配方的數量
+                    existingMaterial.quantity, // 保留使用者輸入的數量
+                    ing.amount, // 更新配方需求量
                     existingMaterial.includeTax,
                 );
             }
@@ -128,6 +130,7 @@ watch(localTaxRate, (newVal: number) => {
 const newMaterialName = ref('');
 const newMaterialPrice = ref(0);
 const newMaterialQuantity = ref(1);
+const newMaterialRequiredPerCraft = ref(1);
 const newMaterialIncludeTax = ref(false);
 const materialIdCounter = ref(Date.now());
 
@@ -140,6 +143,7 @@ function addMaterial() {
         newMaterialName.value.trim(),
         newMaterialPrice.value,
         newMaterialQuantity.value,
+        newMaterialRequiredPerCraft.value,
         newMaterialIncludeTax.value,
     );
     
@@ -147,6 +151,7 @@ function addMaterial() {
     newMaterialName.value = '';
     newMaterialPrice.value = 0;
     newMaterialQuantity.value = 1;
+    newMaterialRequiredPerCraft.value = 1;
     newMaterialIncludeTax.value = false;
 }
 
@@ -161,6 +166,7 @@ function updateMaterial(material: MaterialCost) {
         material.materialName,
         material.price,
         material.quantity,
+        material.requiredPerCraft,
         material.includeTax,
     );
 }
@@ -176,6 +182,10 @@ const totalTax = computed(() => store.calculateTotalTax(props.equipmentId));
 const subtotal = computed(() => {
     return costData.value.materials.reduce((sum: number, m: MaterialCost) => sum + m.price * m.quantity, 0);
 });
+
+// 計算可製作數量和單個成本
+const craftableAmount = computed(() => store.calculateCraftableAmount(props.equipmentId));
+const costPerCraft = computed(() => store.calculateCostPerCraft(props.equipmentId));
 
 function clearAll() {
     store.clearEquipmentCost(props.equipmentId);
@@ -272,10 +282,19 @@ function formatNumber(num: number): string {
                 />
                 <el-input-number
                     v-model="newMaterialQuantity"
-                    :min="1"
+                    :min="0"
                     size="small"
                     class="quantity-input"
                     controls-position="right"
+                    :placeholder="$t('owned-quantity')"
+                />
+                <el-input-number
+                    v-model="newMaterialRequiredPerCraft"
+                    :min="1"
+                    size="small"
+                    class="required-input"
+                    controls-position="right"
+                    :placeholder="$t('required-per-craft')"
                 />
                 <el-checkbox v-model="newMaterialIncludeTax" size="small">
                     {{ $t('include-tax') }}
@@ -298,7 +317,7 @@ function formatNumber(num: number): string {
                         />
                     </template>
                 </el-table-column>
-                <el-table-column :label="$t('unit-price')" width="120">
+                <el-table-column :label="$t('unit-price')" width="110">
                     <template #default="{ row }">
                         <el-input-number
                             v-model="row.price"
@@ -309,10 +328,21 @@ function formatNumber(num: number): string {
                         />
                     </template>
                 </el-table-column>
-                <el-table-column :label="$t('quantity')" width="100">
+                <el-table-column :label="$t('owned-quantity')" width="90">
                     <template #default="{ row }">
                         <el-input-number
                             v-model="row.quantity"
+                            :min="0"
+                            size="small"
+                            controls-position="right"
+                            @change="updateMaterial(row)"
+                        />
+                    </template>
+                </el-table-column>
+                <el-table-column :label="$t('required-per-craft')" width="90">
+                    <template #default="{ row }">
+                        <el-input-number
+                            v-model="row.requiredPerCraft"
                             :min="1"
                             size="small"
                             controls-position="right"
@@ -320,7 +350,7 @@ function formatNumber(num: number): string {
                         />
                     </template>
                 </el-table-column>
-                <el-table-column :label="$t('include-tax')" width="80" align="center">
+                <el-table-column :label="$t('include-tax')" width="70" align="center">
                     <template #default="{ row }">
                         <el-checkbox
                             v-model="row.includeTax"
@@ -328,12 +358,12 @@ function formatNumber(num: number): string {
                         />
                     </template>
                 </el-table-column>
-                <el-table-column :label="$t('subtotal')" width="120" align="right">
+                <el-table-column :label="$t('subtotal')" width="100" align="right">
                     <template #default="{ row }">
                         {{ formatNumber(calculateMaterialCost(row)) }}
                     </template>
                 </el-table-column>
-                <el-table-column width="60" align="center">
+                <el-table-column width="50" align="center">
                     <template #default="{ row }">
                         <el-button
                             type="danger"
@@ -353,6 +383,15 @@ function formatNumber(num: number): string {
                 <span>{{ $t('cost-summary') }}</span>
             </template>
             <div class="summary-content">
+                <div class="summary-row">
+                    <el-text>{{ $t('craftable-amount') }}:</el-text>
+                    <el-text class="amount" type="success">{{ craftableAmount }} {{ $t('unit-pieces') }}</el-text>
+                </div>
+                <div class="summary-row">
+                    <el-text>{{ $t('cost-per-craft') }}:</el-text>
+                    <el-text class="amount" type="warning">{{ formatNumber(costPerCraft) }}</el-text>
+                </div>
+                <el-divider />
                 <div class="summary-row">
                     <el-text>{{ $t('subtotal-before-tax') }}:</el-text>
                     <el-text class="amount">{{ formatNumber(subtotal) }}</el-text>
@@ -410,8 +449,9 @@ function formatNumber(num: number): string {
 }
 
 .price-input,
-.quantity-input {
-    width: 100px;
+.quantity-input,
+.required-input {
+    width: 90px;
 }
 
 .summary-content {
@@ -447,7 +487,8 @@ material-costs = 材料成本
 clear-all = 清空
 material-name = 材料名称
 unit-price = 单价
-quantity = 数量
+owned-quantity = 持有
+required-per-craft = 需求
 include-tax = 含税
 subtotal = 小计
 add = 添加
@@ -455,10 +496,13 @@ cost-summary = 成本汇总
 subtotal-before-tax = 税前小计
 tax-amount = 税额
 total-cost = 总成本
+craftable-amount = 可制作数量
+cost-per-craft = 单个成本
+unit-pieces = 个
 load-from-recipe = 从配方载入
 load-error = 载入失败
 no-recipe-id-error = 无法获取配方信息
-ingredients-loaded = 材料已从配方自动载入，请输入单价
+ingredients-loaded = 材料已从配方自动载入，请输入单价和持有数量
 </fluent>
 
 <fluent locale="zh-TW">
@@ -468,7 +512,8 @@ material-costs = 材料成本
 clear-all = 清空
 material-name = 材料名稱
 unit-price = 單價
-quantity = 數量
+owned-quantity = 持有
+required-per-craft = 需求
 include-tax = 含稅
 subtotal = 小計
 add = 新增
@@ -476,10 +521,13 @@ cost-summary = 成本匯總
 subtotal-before-tax = 稅前小計
 tax-amount = 稅額
 total-cost = 總成本
+craftable-amount = 可製作數量
+cost-per-craft = 單個成本
+unit-pieces = 個
 load-from-recipe = 從配方載入
 load-error = 載入失敗
 no-recipe-id-error = 無法取得配方資訊
-ingredients-loaded = 材料已從配方自動載入，請輸入單價
+ingredients-loaded = 材料已從配方自動載入，請輸入單價和持有數量
 </fluent>
 
 <fluent locale="en-US">
@@ -489,18 +537,22 @@ material-costs = Material Costs
 clear-all = Clear All
 material-name = Material Name
 unit-price = Unit Price
-quantity = Quantity
-include-tax = Tax Included
+owned-quantity = Owned
+required-per-craft = Required
+include-tax = Tax Incl.
 subtotal = Subtotal
 add = Add
 cost-summary = Cost Summary
 subtotal-before-tax = Subtotal Before Tax
 tax-amount = Tax Amount
 total-cost = Total Cost
+craftable-amount = Craftable Amount
+cost-per-craft = Cost Per Craft
+unit-pieces = pcs
 load-from-recipe = Load from Recipe
 load-error = Load Failed
 no-recipe-id-error = Unable to get recipe information
-ingredients-loaded = Materials loaded from recipe. Please enter unit prices.
+ingredients-loaded = Materials loaded from recipe. Please enter unit prices and owned quantities.
 </fluent>
 
 <fluent locale="ja-JP">
@@ -510,7 +562,8 @@ material-costs = 材料コスト
 clear-all = クリア
 material-name = 材料名
 unit-price = 単価
-quantity = 数量
+owned-quantity = 所持
+required-per-craft = 必要
 include-tax = 税込み
 subtotal = 小計
 add = 追加
@@ -518,8 +571,11 @@ cost-summary = コスト集計
 subtotal-before-tax = 税前小計
 tax-amount = 税額
 total-cost = 総コスト
+craftable-amount = 製作可能数
+cost-per-craft = 単体コスト
+unit-pieces = 個
 load-from-recipe = レシピから読み込む
 load-error = 読み込み失敗
 no-recipe-id-error = レシピ情報を取得できません
-ingredients-loaded = 材料がレシピから自動的に読み込まれました。単価を入力してください。
+ingredients-loaded = 材料がレシピから自動的に読み込まれました。単価と所持数を入力してください。
 </fluent>
