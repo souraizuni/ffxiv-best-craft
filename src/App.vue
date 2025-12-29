@@ -44,6 +44,7 @@ import Menu from '@/components/Menu.vue';
 import useSettingsStore from '@/stores/settings';
 import useGearsetsStore from '@/stores/gearsets';
 import useDesignerStore from '@/stores/designer';
+import useSimulatorCostsStore from '@/stores/simulator-costs';
 import { elementPlusLang, languages } from './lang';
 import { selectLanguage } from './fluent';
 import { useRouter } from 'vue-router';
@@ -53,6 +54,7 @@ const colorMode = useColorMode();
 const settingsStore = useSettingsStore();
 const gearsetsStore = useGearsetsStore();
 const designerStore = useDesignerStore();
+const simulatorCostsStore = useSimulatorCostsStore();
 const preferredLang = usePreferredLanguages();
 const bgColor = useCssVar('--app-bg-color', ref(null));
 const bgMainColor = useCssVar('--tnze-main-bg-color', ref(null));
@@ -80,22 +82,26 @@ if (isTauri) {
 async function loadStorages() {
     let settingsJson: Promise<string> | string | null,
         gearsetsJson: Promise<string> | string | null,
-        designerJson: Promise<string> | string | null;
+        designerJson: Promise<string> | string | null,
+        simulatorCostsJson: Promise<string> | string | null;
     if (isTauri) {
         const { BaseDirectory, readTextFile } = await pkgTauriFs;
         const options = { baseDir: BaseDirectory.AppData };
         settingsJson = readTextFile('settings.json', options);
         gearsetsJson = readTextFile('gearsets.json', options);
         designerJson = readTextFile('designer.json', options);
+        simulatorCostsJson = readTextFile('simulator-costs.json', options);
     } else {
         settingsJson = window.localStorage.getItem('settings.json');
         gearsetsJson = window.localStorage.getItem('gearsets.json');
         designerJson = window.localStorage.getItem('designer.json');
+        simulatorCostsJson = window.localStorage.getItem('simulator-costs.json');
     }
     for (const v of [
         { dst: settingsStore.fromJson, src: settingsJson },
         { dst: gearsetsStore.fromJson, src: gearsetsJson },
         { dst: designerStore.fromJson, src: designerJson },
+        { dst: simulatorCostsStore.fromJson, src: simulatorCostsJson },
     ]) {
         if (v.src === null) continue;
         try {
@@ -145,6 +151,9 @@ onMounted(async () => {
     );
     designerStore.$subscribe(() =>
         writeJson('designer.json', designerStore.toJson),
+    );
+    simulatorCostsStore.$subscribe(() =>
+        writeJson('simulator-costs.json', simulatorCostsStore.toJson),
     );
 });
 

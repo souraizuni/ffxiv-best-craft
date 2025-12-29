@@ -115,6 +115,7 @@ function reload() {
                 v-else
                 :item="designerStore.content.item"
                 :recipe="designerStore.content.recipe"
+                :recipe-id="designerStore.content.recipeId"
                 :collectable-shop-refine="designerStore.content.collectability"
                 :attributes="attributes"
             />

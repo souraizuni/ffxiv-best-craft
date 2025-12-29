@@ -25,6 +25,8 @@ import {
     ElTableColumn,
     ElCard,
     ElSwitch,
+    ElTabs,
+    ElTabPane,
 } from 'element-plus';
 import { Ref, computed, inject, ref, watch } from 'vue';
 import {
@@ -39,15 +41,16 @@ import {
     simulateOneStep,
     CollectablesShopRefine,
 } from '@/libs/Craft';
-import { Enhancer } from '@/libs/Enhancer';
 import StatusBarVue from './StatusBar.vue';
 import ActionPanelVue from './ActionPanel.vue';
 import ActionQueueVue from './ActionQueue.vue';
 import AttrEnhSelector from './tabs/AttrEnhSelector.vue';
+import CostCalculator from './tabs/CostCalculator.vue';
 import { displayJobKey } from './injectionkeys';
 
 const props = defineProps<{
     recipe: Recipe;
+    recipeId?: number;
     item: Item;
     attributes: Attributes;
     collectableShopRefine?: CollectablesShopRefine;
@@ -101,6 +104,7 @@ const results = ref<Status[]>([]);
 const waiting = ref(false);
 const preview = ref<Status | null>(null);
 const rapidMode = ref(true);
+const activeTab = ref('results');
 let timer: any;
 
 const sleep = (t: number) => new Promise(resolve => setTimeout(resolve, t));
@@ -210,19 +214,32 @@ function leaveAction() {
                 />
             </el-scrollbar>
             <el-card class="results">
-                <el-scrollbar>
-                    <el-table :data="results">
-                        <el-table-column prop="step" :label="$t('steps')" />
-                        <el-table-column
-                            prop="progress"
-                            :label="$t('progress')"
-                        />
-                        <el-table-column
-                            prop="quality"
-                            :label="$t('quality')"
-                        />
-                    </el-table>
-                </el-scrollbar>
+                <el-tabs v-model="activeTab">
+                    <el-tab-pane :label="$t('sim-results')" name="results">
+                        <el-scrollbar>
+                            <el-table :data="results">
+                                <el-table-column prop="step" :label="$t('steps')" />
+                                <el-table-column
+                                    prop="progress"
+                                    :label="$t('progress')"
+                                />
+                                <el-table-column
+                                    prop="quality"
+                                    :label="$t('quality')"
+                                />
+                            </el-table>
+                        </el-scrollbar>
+                    </el-tab-pane>
+                    <el-tab-pane :label="$t('cost-calculator')" name="cost">
+                        <el-scrollbar>
+                            <CostCalculator
+                                :equipment-id="item.id.toString()"
+                                :equipment-name="item.name"
+                                :recipe-id="props.recipeId"
+                            />
+                        </el-scrollbar>
+                    </el-tab-pane>
+                </el-tabs>
             </el-card>
         </div>
     </div>
@@ -276,14 +293,27 @@ function leaveAction() {
 <fluent locale="zh-CN">
 meal-and-potion = 食物 & 药水
 restart = 倒
+sim-results = 模拟结果
+cost-calculator = 成本计算
 </fluent>
 
 <fluent locale="zh-TW">
 meal-and-potion = 食物 & 藥水
 restart = 倒
+sim-results = 模擬結果
+cost-calculator = 成本計算
 </fluent>
 
 <fluent locale="en-US">
 meal-and-potion = Meal & Potions
 restart = Restart
+sim-results = Simulation Results
+cost-calculator = Cost Calculator
+</fluent>
+
+<fluent locale="ja-JP">
+meal-and-potion = 食事 & 薬品
+restart = リスタート
+sim-results = シミュレーション結果
+cost-calculator = コスト計算
 </fluent>
