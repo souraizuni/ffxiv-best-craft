@@ -112,12 +112,8 @@ async function loadRecipeIngredients() {
     }
 }
 
-// 當 recipeId 變更時自動載入材料
-watch(() => props.recipeId, (newRecipeId: number | undefined) => {
-    if (newRecipeId && costData.value.materials.length === 0) {
-        loadRecipeIngredients();
-    }
-}, { immediate: true });
+// 移除自動載入，改為手動點擊按鈕載入
+// 避免 API 呼叫失敗導致頁面錯誤
 
 // 本地稅率編輯
 const localTaxRate = ref(costData.value.taxRate);
