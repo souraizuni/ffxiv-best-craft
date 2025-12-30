@@ -29,6 +29,7 @@ export interface EquipmentCostData {
     equipmentId: string; // 使用配方 ID 或物品名稱作為識別
     materials: MaterialCost[];
     taxRate: number; // 稅率百分比，預設 5
+    targetCraftAmount: number; // 目標製作數量
 }
 
 export default defineStore('simulator-costs', {
@@ -75,6 +76,7 @@ export default defineStore('simulator-costs', {
                     equipmentId,
                     materials: [],
                     taxRate: this.defaultTaxRate,
+                    targetCraftAmount: 1,
                 };
                 this.costs.set(equipmentId, costData);
             }
@@ -198,6 +200,50 @@ export default defineStore('simulator-costs', {
             return costData.materials.reduce((total: number, material: MaterialCost) => {
                 const materialCostPerUnit = material.price * (material.includeTax ? 1 : (1 + costData.taxRate / 100));
                 return total + materialCostPerUnit * material.requiredPerCraft;
+            }, 0);
+        },
+
+        // 更新目標製作數量
+        updateTargetCraftAmount(equipmentId: string, targetAmount: number) {
+            const costData = this.getOrCreateEquipmentCost(equipmentId);
+            costData.targetCraftAmount = Math.max(0, Math.floor(targetAmount));
+        },
+
+        // 計算每種材料需要購買的數量（根據目標製作數量和現有庫存）
+        calculateRequiredMaterialAmount(material: MaterialCost, targetCraftAmount: number): number {
+            const totalNeeded = material.requiredPerCraft * targetCraftAmount;
+            const shortage = totalNeeded - material.quantity;
+            return Math.max(0, shortage);
+        },
+
+        // 取得所有材料的需要購買數量
+        getRequiredMaterialAmounts(equipmentId: string): { materialId: number; materialName: string; required: number; totalNeeded: number }[] {
+            const costData = this.costs.get(equipmentId);
+            if (!costData || costData.materials.length === 0) return [];
+
+            const targetAmount = costData.targetCraftAmount || 1;
+            return costData.materials.map((m: MaterialCost) => {
+                const totalNeeded = m.requiredPerCraft * targetAmount;
+                return {
+                    materialId: m.materialId,
+                    materialName: m.materialName,
+                    required: Math.max(0, totalNeeded - m.quantity),
+                    totalNeeded,
+                };
+            });
+        },
+
+        // 計算目標製作數量的總成本
+        calculateTargetCraftTotalCost(equipmentId: string): number {
+            const costData = this.costs.get(equipmentId);
+            if (!costData || costData.materials.length === 0) return 0;
+
+            const targetAmount = costData.targetCraftAmount || 1;
+            return costData.materials.reduce((total: number, material: MaterialCost) => {
+                const totalNeeded = material.requiredPerCraft * targetAmount;
+                const shortage = Math.max(0, totalNeeded - material.quantity);
+                const materialCostPerUnit = material.price * (material.includeTax ? 1 : (1 + costData.taxRate / 100));
+                return total + materialCostPerUnit * shortage;
             }, 0);
         },
     },

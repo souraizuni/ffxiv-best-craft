@@ -187,6 +187,25 @@ const subtotal = computed(() => {
 const craftableAmount = computed(() => store.calculateCraftableAmount(props.equipmentId));
 const costPerCraft = computed(() => store.calculateCostPerCraft(props.equipmentId));
 
+// 目標製作數量
+const localTargetCraftAmount = ref(costData.value.targetCraftAmount || 1);
+watch(() => costData.value.targetCraftAmount, (newVal: number) => {
+    localTargetCraftAmount.value = newVal || 1;
+}, { immediate: true });
+watch(localTargetCraftAmount, (newVal: number) => {
+    store.updateTargetCraftAmount(props.equipmentId, newVal);
+});
+
+// 需要購買的材料數量
+const requiredMaterials = computed(() => store.getRequiredMaterialAmounts(props.equipmentId));
+const targetCraftTotalCost = computed(() => store.calculateTargetCraftTotalCost(props.equipmentId));
+
+// 取得特定材料需要購買的數量
+function getRequiredAmount(materialId: number): number {
+    const material = requiredMaterials.value.find((m: { materialId: number }) => m.materialId === materialId);
+    return material?.required || 0;
+}
+
 function clearAll() {
     store.clearEquipmentCost(props.equipmentId);
 }
@@ -215,6 +234,15 @@ function formatNumber(num: number): string {
                     >
                         <template #suffix>%</template>
                     </el-input-number>
+                </el-form-item>
+                <el-form-item :label="$t('target-craft-amount')">
+                    <el-input-number
+                        v-model="localTargetCraftAmount"
+                        :min="0"
+                        :step="1"
+                        size="small"
+                        controls-position="right"
+                    />
                 </el-form-item>
             </el-form>
         </el-card>
@@ -358,6 +386,13 @@ function formatNumber(num: number): string {
                         />
                     </template>
                 </el-table-column>
+                <el-table-column :label="$t('need-to-buy')" width="90" align="right">
+                    <template #default="{ row }">
+                        <span :class="{ 'shortage': getRequiredAmount(row.materialId) > 0 }">
+                            {{ getRequiredAmount(row.materialId) }}
+                        </span>
+                    </template>
+                </el-table-column>
                 <el-table-column :label="$t('subtotal')" width="100" align="right">
                     <template #default="{ row }">
                         {{ formatNumber(calculateMaterialCost(row)) }}
@@ -390,6 +425,10 @@ function formatNumber(num: number): string {
                 <div class="summary-row">
                     <el-text>{{ $t('cost-per-craft') }}:</el-text>
                     <el-text class="amount" type="warning">{{ formatNumber(costPerCraft) }}</el-text>
+                </div>
+                <div class="summary-row">
+                    <el-text>{{ $t('target-craft-cost') }} ({{ localTargetCraftAmount }} {{ $t('unit-pieces') }}):</el-text>
+                    <el-text class="amount" type="danger">{{ formatNumber(targetCraftTotalCost) }}</el-text>
                 </div>
                 <el-divider />
                 <div class="summary-row">
@@ -478,6 +517,11 @@ function formatNumber(num: number): string {
     --el-table-header-bg-color: transparent;
     --el-table-tr-bg-color: transparent;
 }
+
+.shortage {
+    color: var(--el-color-danger);
+    font-weight: bold;
+}
 </style>
 
 <fluent locale="zh-CN">
@@ -499,6 +543,9 @@ total-cost = 总成本
 craftable-amount = 可制作数量
 cost-per-craft = 单个成本
 unit-pieces = 个
+target-craft-amount = 目标制作数量
+need-to-buy = 需购买
+target-craft-cost = 目标制作成本
 load-from-recipe = 从配方载入
 load-error = 载入失败
 no-recipe-id-error = 无法获取配方信息
@@ -524,6 +571,9 @@ total-cost = 總成本
 craftable-amount = 可製作數量
 cost-per-craft = 單個成本
 unit-pieces = 個
+target-craft-amount = 目標製作數量
+need-to-buy = 需購買
+target-craft-cost = 目標製作成本
 load-from-recipe = 從配方載入
 load-error = 載入失敗
 no-recipe-id-error = 無法取得配方資訊
@@ -549,6 +599,9 @@ total-cost = Total Cost
 craftable-amount = Craftable Amount
 cost-per-craft = Cost Per Craft
 unit-pieces = pcs
+target-craft-amount = Target Craft Amount
+need-to-buy = Need to Buy
+target-craft-cost = Target Craft Cost
 load-from-recipe = Load from Recipe
 load-error = Load Failed
 no-recipe-id-error = Unable to get recipe information
@@ -574,6 +627,9 @@ total-cost = 総コスト
 craftable-amount = 製作可能数
 cost-per-craft = 単体コスト
 unit-pieces = 個
+target-craft-amount = 目標製作数
+need-to-buy = 購入必要
+target-craft-cost = 目標製作コスト
 load-from-recipe = レシピから読み込む
 load-error = 読み込み失敗
 no-recipe-id-error = レシピ情報を取得できません
