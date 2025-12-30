@@ -32,11 +32,15 @@ import {
     ElIcon,
     ElInput,
     ElAlert,
+    ElTabs,
+    ElTabPane,
 } from 'element-plus';
 import { Plus, Delete, Refresh } from '@element-plus/icons-vue';
 import useSimulatorCostsStore, { MaterialCost } from '@/stores/simulator-costs';
 import useSettingsStore from '@/stores/settings';
 import { ItemWithAmount } from '@/libs/Craft';
+import MaterialTree from './MaterialTree.vue';
+import type { MaterialTreeNode } from './MaterialTree.vue';
 
 const props = defineProps<{
     equipmentId: string;
@@ -210,6 +214,19 @@ function clearAll() {
     store.clearEquipmentCost(props.equipmentId);
 }
 
+// 樹狀材料相關
+const activeTab = ref('flat'); // 'flat' 或 'tree'
+const treeTotalCost = ref(0);
+const treeBaseMaterials = ref<MaterialTreeNode[]>([]);
+
+function onTreeCostCalculated(cost: number) {
+    treeTotalCost.value = cost;
+}
+
+function onTreeBaseMaterialsUpdate(materials: MaterialTreeNode[]) {
+    treeBaseMaterials.value = materials;
+}
+
 // 格式化數字
 function formatNumber(num: number): string {
     return num.toLocaleString('zh-TW', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -247,27 +264,31 @@ function formatNumber(num: number): string {
             </el-form>
         </el-card>
 
-        <el-card class="materials-card">
-            <template #header>
-                <div class="card-header">
-                    <span>{{ $t('material-costs') }}</span>
-                    <div class="header-buttons">
-                        <el-button
-                            v-if="props.recipeId"
-                            type="primary"
-                            size="small"
-                            @click="loadRecipeIngredients"
-                            :loading="loadingIngredients"
-                            :icon="Refresh"
-                        >
-                            {{ $t('load-from-recipe') }}
-                        </el-button>
-                        <el-button type="danger" size="small" @click="clearAll" :icon="Delete">
-                            {{ $t('clear-all') }}
-                        </el-button>
-                    </div>
-                </div>
-            </template>
+        <!-- 材料檢視模式切換 -->
+        <el-tabs v-model="activeTab" type="border-card" class="materials-tabs">
+            <!-- 平面材料檢視 -->
+            <el-tab-pane :label="$t('flat-view')" name="flat">
+                <el-card class="materials-card" shadow="never">
+                    <template #header>
+                        <div class="card-header">
+                            <span>{{ $t('material-costs') }}</span>
+                            <div class="header-buttons">
+                                <el-button
+                                    v-if="props.recipeId"
+                                    type="primary"
+                                    size="small"
+                                    @click="loadRecipeIngredients"
+                                    :loading="loadingIngredients"
+                                    :icon="Refresh"
+                                >
+                                    {{ $t('load-from-recipe') }}
+                                </el-button>
+                                <el-button type="danger" size="small" @click="clearAll" :icon="Delete">
+                                    {{ $t('clear-all') }}
+                                </el-button>
+                            </div>
+                        </div>
+                    </template>
 
             <!-- 載入錯誤提示 -->
             <el-alert
@@ -411,9 +432,40 @@ function formatNumber(num: number): string {
                 </el-table-column>
             </el-table>
         </el-card>
+            </el-tab-pane>
+
+            <!-- 樹狀材料檢視 -->
+            <el-tab-pane :label="$t('tree-view')" name="tree">
+                <MaterialTree
+                    :recipe-id="props.recipeId"
+                    :target-amount="localTargetCraftAmount"
+                    @update:base-materials="onTreeBaseMaterialsUpdate"
+                    @cost-calculated="onTreeCostCalculated"
+                />
+                
+                <!-- 樹狀檢視成本匯總 -->
+                <el-card class="tree-summary-card" v-if="treeBaseMaterials.length > 0">
+                    <template #header>
+                        <span>{{ $t('tree-cost-summary') }}</span>
+                    </template>
+                    <div class="summary-content">
+                        <div class="summary-row">
+                            <el-text>{{ $t('base-materials-count') }}:</el-text>
+                            <el-text class="amount" type="info">{{ treeBaseMaterials.length }} {{ $t('types') }}</el-text>
+                        </div>
+                        <div class="summary-row total">
+                            <el-text size="large" tag="b">{{ $t('tree-total-cost') }}:</el-text>
+                            <el-text size="large" tag="b" type="primary" class="amount">
+                                {{ formatNumber(treeTotalCost) }}
+                            </el-text>
+                        </div>
+                    </div>
+                </el-card>
+            </el-tab-pane>
+        </el-tabs>
 
         <!-- 總計區域 -->
-        <el-card class="summary-card">
+        <el-card class="summary-card" v-if="activeTab === 'flat'">
             <template #header>
                 <span>{{ $t('cost-summary') }}</span>
             </template>
@@ -522,6 +574,19 @@ function formatNumber(num: number): string {
     color: var(--el-color-danger);
     font-weight: bold;
 }
+
+.materials-tabs {
+    --el-tabs-header-height: 36px;
+}
+
+.materials-tabs .materials-card {
+    border: none;
+    box-shadow: none;
+}
+
+.tree-summary-card {
+    margin-top: 15px;
+}
 </style>
 
 <fluent locale="zh-CN">
@@ -550,6 +615,12 @@ load-from-recipe = 从配方载入
 load-error = 载入失败
 no-recipe-id-error = 无法获取配方信息
 ingredients-loaded = 材料已从配方自动载入，请输入单价和持有数量
+flat-view = 平面检视
+tree-view = 树状检视
+tree-cost-summary = 树状材料成本汇总
+base-materials-count = 基础材料种类
+types = 种
+tree-total-cost = 需购买成本
 </fluent>
 
 <fluent locale="zh-TW">
@@ -578,6 +649,12 @@ load-from-recipe = 從配方載入
 load-error = 載入失敗
 no-recipe-id-error = 無法取得配方資訊
 ingredients-loaded = 材料已從配方自動載入，請輸入單價和持有數量
+flat-view = 平面檢視
+tree-view = 樹狀檢視
+tree-cost-summary = 樹狀材料成本匯總
+base-materials-count = 基礎材料種類
+types = 種
+tree-total-cost = 需購買成本
 </fluent>
 
 <fluent locale="en-US">
@@ -606,6 +683,12 @@ load-from-recipe = Load from Recipe
 load-error = Load Failed
 no-recipe-id-error = Unable to get recipe information
 ingredients-loaded = Materials loaded from recipe. Please enter unit prices and owned quantities.
+flat-view = Flat View
+tree-view = Tree View
+tree-cost-summary = Tree Material Cost Summary
+base-materials-count = Base Material Types
+types = types
+tree-total-cost = Total Purchase Cost
 </fluent>
 
 <fluent locale="ja-JP">
@@ -634,4 +717,10 @@ load-from-recipe = レシピから読み込む
 load-error = 読み込み失敗
 no-recipe-id-error = レシピ情報を取得できません
 ingredients-loaded = 材料がレシピから自動的に読み込まれました。単価と所持数を入力してください。
+flat-view = フラット表示
+tree-view = ツリー表示
+tree-cost-summary = ツリー材料コスト集計
+base-materials-count = 基礎材料種類
+types = 種
+tree-total-cost = 購入コスト合計
 </fluent>
