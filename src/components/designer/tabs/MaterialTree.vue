@@ -85,6 +85,28 @@ watch(localCraftAmount, () => {
     recalculateAll();
 });
 
+// 計算可製作數量（根據持有數量和每次製作所需數量）
+const craftableAmount = computed(() => {
+    if (treeData.value.length === 0) return 0;
+    
+    // 取得所有基礎材料（葉節點或未展開的節點）
+    const baseMaterials = collectBaseMaterials(treeData.value);
+    if (baseMaterials.length === 0) return 0;
+    
+    // 找出每種材料可以製作的數量，取最小值
+    const craftableAmounts = baseMaterials
+        .filter(m => m.requiredPerCraft > 0)
+        .map(m => Math.floor(m.ownedQuantity / m.requiredPerCraft));
+    
+    if (craftableAmounts.length === 0) return 0;
+    return Math.min(...craftableAmounts);
+});
+
+// 計算總使用成本（需購買的材料成本）
+const totalPurchaseCost = computed(() => {
+    return calculateTotalCost(treeData.value);
+});
+
 // 配方快取（透過 item_id 查找）
 const recipeCache = new Map<number, RecipeInfo[]>();
 const ingredientsCache = new Map<number, ItemWithAmount[]>();
@@ -363,6 +385,23 @@ defineExpose({
             </el-button>
         </div>
 
+        <!-- 成本匯總卡片 -->
+        <div v-if="treeData.length > 0" class="cost-summary-bar">
+            <div class="summary-item">
+                <span class="summary-label">{{ $t('craftable-amount') }}:</span>
+                <span class="summary-value success">{{ craftableAmount }}</span>
+                <span class="summary-unit">{{ $t('unit-pieces') }}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">{{ $t('total-purchase-cost') }}:</span>
+                <span class="summary-value warning">{{ formatNumber(totalPurchaseCost) }}</span>
+            </div>
+            <div class="summary-item" v-if="localCraftAmount > 0">
+                <span class="summary-label">{{ $t('cost-per-craft') }}:</span>
+                <span class="summary-value">{{ formatNumber(totalPurchaseCost / localCraftAmount) }}</span>
+            </div>
+        </div>
+
         <!-- 錯誤提示 -->
         <el-alert
             v-if="loadError"
@@ -622,6 +661,46 @@ const MaterialTreeNodeVue = defineComponent({
     color: var(--el-text-color-regular);
     white-space: nowrap;
 }
+
+.cost-summary-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    padding: 12px 15px;
+    background: var(--el-color-info-light-9);
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.summary-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.summary-label {
+    font-size: 13px;
+    color: var(--el-text-color-regular);
+}
+
+.summary-value {
+    font-size: 16px;
+    font-weight: bold;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.summary-value.success {
+    color: var(--el-color-success);
+}
+
+.summary-value.warning {
+    color: var(--el-color-warning);
+}
+
+.summary-unit {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+}
 </style>
 
 <fluent locale="zh-CN">
@@ -634,6 +713,10 @@ owned-quantity = 持有数量
 need-to-buy = 需购买
 unit-price = 单价
 subtotal = 小计
+craftable-amount = 可制作数量
+total-purchase-cost = 总购买成本
+cost-per-craft = 单个成本
+unit-pieces = 个
 </fluent>
 
 <fluent locale="zh-TW">
@@ -646,6 +729,10 @@ owned-quantity = 持有數量
 need-to-buy = 需購買
 unit-price = 單價
 subtotal = 小計
+craftable-amount = 可製作數量
+total-purchase-cost = 總購買成本
+cost-per-craft = 單個成本
+unit-pieces = 個
 </fluent>
 
 <fluent locale="en-US">
@@ -658,6 +745,10 @@ owned-quantity = Owned
 need-to-buy = Need to Buy
 unit-price = Unit Price
 subtotal = Subtotal
+craftable-amount = Craftable Amount
+total-purchase-cost = Total Purchase Cost
+cost-per-craft = Cost Per Craft
+unit-pieces = pcs
 </fluent>
 
 <fluent locale="ja-JP">
@@ -670,4 +761,8 @@ owned-quantity = 所持数
 need-to-buy = 購入必要
 unit-price = 単価
 subtotal = 小計
+craftable-amount = 製作可能数
+total-purchase-cost = 総購入コスト
+cost-per-craft = 単体コスト
+unit-pieces = 個
 </fluent>
