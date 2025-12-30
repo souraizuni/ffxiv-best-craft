@@ -516,30 +516,31 @@ const MaterialTreeNodeVue = defineComponent({
     border-bottom: 1px solid var(--el-border-color);
 }
 
-.tree-node-wrapper {
+/* 使用 :deep() 讓 scoped 樣式能套用到 defineComponent 渲染的子元件 */
+:deep(.tree-node-wrapper) {
     border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
-.tree-node-wrapper:last-child {
+:deep(.tree-node-wrapper:last-child) {
     border-bottom: none;
 }
 
-.tree-node-row {
+:deep(.tree-node-row) {
     display: flex;
     align-items: center;
     padding: 6px 12px;
     transition: background-color 0.2s;
 }
 
-.tree-node-row:hover {
+:deep(.tree-node-row:hover) {
     background: var(--el-fill-color-lighter);
 }
 
-.tree-node-row.has-children {
+:deep(.tree-node-row.has-children) {
     cursor: pointer;
 }
 
-.col-name {
+:deep(.col-name) {
     flex: 1;
     min-width: 200px;
     display: flex;
@@ -547,20 +548,20 @@ const MaterialTreeNodeVue = defineComponent({
     gap: 6px;
 }
 
-.col-required,
-.col-need,
-.col-subtotal {
+:deep(.col-required),
+:deep(.col-need),
+:deep(.col-subtotal) {
     width: 80px;
     text-align: right;
     font-family: 'Consolas', 'Monaco', monospace;
 }
 
-.col-owned,
-.col-price {
+:deep(.col-owned),
+:deep(.col-price) {
     width: 100px;
 }
 
-.expand-btn {
+:deep(.expand-btn) {
     cursor: pointer;
     user-select: none;
     width: 16px;
@@ -570,27 +571,27 @@ const MaterialTreeNodeVue = defineComponent({
     transition: transform 0.2s;
 }
 
-.expand-btn.expanded {
+:deep(.expand-btn.expanded) {
     color: var(--el-color-primary);
 }
 
-.expand-placeholder {
+:deep(.expand-placeholder) {
     width: 16px;
     display: inline-block;
     text-align: center;
     color: var(--el-text-color-placeholder);
 }
 
-.node-name {
+:deep(.node-name) {
     font-size: 13px;
 }
 
-.shortage {
+:deep(.shortage) {
     color: var(--el-color-danger);
     font-weight: bold;
 }
 
-.tree-children {
+:deep(.tree-children) {
     background: var(--el-fill-color-blank);
 }
 
