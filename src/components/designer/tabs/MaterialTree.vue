@@ -69,6 +69,22 @@ const treeData = ref<MaterialTreeNode[]>([]);
 const loading = ref(false);
 const loadError = ref<string | null>(null);
 
+// 本地製作數量（可在樹狀檢視中獨立設定）
+const localCraftAmount = ref(props.targetAmount || 1);
+
+// 監聽父元件傳入的 targetAmount 變化
+watch(() => props.targetAmount, (newVal: number) => {
+    if (newVal > 0) {
+        localCraftAmount.value = newVal;
+        recalculateAll();
+    }
+}, { immediate: true });
+
+// 當本地製作數量變化時重新計算
+watch(localCraftAmount, () => {
+    recalculateAll();
+});
+
 // 配方快取（透過 item_id 查找）
 const recipeCache = new Map<number, RecipeInfo[]>();
 const ingredientsCache = new Map<number, ItemWithAmount[]>();
@@ -153,10 +169,10 @@ async function loadMaterialTree() {
                 id: itemInfo.id,
                 name: itemInfo.name,
                 requiredPerCraft: ing.amount,
-                totalRequired: ing.amount * props.targetAmount,
+                totalRequired: ing.amount * localCraftAmount.value,
                 ownedQuantity: 0,
                 unitPrice: 0,
-                needToBuy: ing.amount * props.targetAmount,
+                needToBuy: ing.amount * localCraftAmount.value,
                 recipeId: recipe?.id,
                 canCraft: recipe !== null,
                 expanded: false,
@@ -255,7 +271,7 @@ function recalculateNode(node: MaterialTreeNode) {
 function recalculateAll() {
     // 重新計算各節點的需購買數量
     for (const node of treeData.value) {
-        node.totalRequired = node.requiredPerCraft * props.targetAmount;
+        node.totalRequired = node.requiredPerCraft * localCraftAmount.value;
         recalculateNode(node);
     }
 
@@ -324,8 +340,18 @@ defineExpose({
 
 <template>
     <div class="material-tree">
-        <!-- 載入按鈕 -->
-        <div class="tree-header">
+        <!-- 設定區域 -->
+        <div class="tree-settings">
+            <div class="setting-item">
+                <span class="setting-label">{{ $t('craft-amount') }}:</span>
+                <el-input-number
+                    v-model="localCraftAmount"
+                    :min="1"
+                    :step="1"
+                    size="small"
+                    controls-position="right"
+                />
+            </div>
             <el-button
                 type="primary"
                 size="small"
@@ -573,28 +599,74 @@ const MaterialTreeNodeVue = defineComponent({
     text-align: center;
     padding: 20px;
 }
+
+.tree-settings {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 15px;
+    padding: 10px;
+    background: var(--el-fill-color-light);
+    border-radius: 4px;
+}
+
+.setting-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.setting-label {
+    font-size: 13px;
+    color: var(--el-text-color-regular);
+    white-space: nowrap;
+}
 </style>
 
 <fluent locale="zh-CN">
 load-material-tree = 载入材料树
 total-required = 总需求
 click-load-to-start = 点击上方按钮载入材料树状图
+craft-amount = 制作数量
+material-name = 材料名称
+owned-quantity = 持有数量
+need-to-buy = 需购买
+unit-price = 单价
+subtotal = 小计
 </fluent>
 
 <fluent locale="zh-TW">
 load-material-tree = 載入材料樹
 total-required = 總需求
 click-load-to-start = 點擊上方按鈕載入材料樹狀圖
+craft-amount = 製作數量
+material-name = 材料名稱
+owned-quantity = 持有數量
+need-to-buy = 需購買
+unit-price = 單價
+subtotal = 小計
 </fluent>
 
 <fluent locale="en-US">
 load-material-tree = Load Material Tree
 total-required = Total Required
 click-load-to-start = Click the button above to load material tree
+craft-amount = Craft Amount
+material-name = Material Name
+owned-quantity = Owned
+need-to-buy = Need to Buy
+unit-price = Unit Price
+subtotal = Subtotal
 </fluent>
 
 <fluent locale="ja-JP">
 load-material-tree = 材料ツリーを読み込む
 total-required = 総必要数
 click-load-to-start = 上のボタンをクリックして材料ツリーを読み込みます
+craft-amount = 製作数
+material-name = 材料名
+owned-quantity = 所持数
+need-to-buy = 購入必要
+unit-price = 単価
+subtotal = 小計
 </fluent>
