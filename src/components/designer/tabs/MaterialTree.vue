@@ -37,19 +37,20 @@ import { ItemWithAmount, RecipeInfo } from '@/libs/Craft';
 
 // 樹狀節點資料結構
 export interface MaterialTreeNode {
-    id: number;                     // 材料 ID
-    name: string;                   // 材料名稱
-    requiredPerCraft: number;       // 每次製作所需數量
-    totalRequired: number;          // 總共需要數量（根據目標製作數量計算）
-    ownedQuantity: number;          // 持有數量
-    unitPrice: number;              // 單價
-    needToBuy: number;              // 需購買數量
-    recipeId?: number;              // 若此材料可製作，則有配方 ID
-    canCraft: boolean;              // 是否可以製作
-    expanded: boolean;              // 是否展開子材料
-    loading: boolean;               // 是否正在載入子材料
-    children: MaterialTreeNode[];   // 子材料
-    depth: number;                  // 樹的深度
+    id: number;                         // 材料 ID
+    name: string;                       // 材料名稱
+    requiredPerCraft: number;           // 每次製作所需數量（製作父材料）
+    baseRequiredPerFinalProduct: number; // 每製作一個最終產品所需的材料數量（用於計算可製作數量）
+    totalRequired: number;              // 總共需要數量（根據目標製作數量計算，會被庫存影響）
+    ownedQuantity: number;              // 持有數量
+    unitPrice: number;                  // 單價
+    needToBuy: number;                  // 需購買數量
+    recipeId?: number;                  // 若此材料可製作，則有配方 ID
+    canCraft: boolean;                  // 是否可以製作
+    expanded: boolean;                  // 是否展開子材料
+    loading: boolean;                   // 是否正在載入子材料
+    children: MaterialTreeNode[];       // 子材料
+    depth: number;                      // 樹的深度
 }
 
 const props = defineProps<{
@@ -85,7 +86,7 @@ watch(localCraftAmount, () => {
     recalculateAll();
 });
 
-// 計算可製作數量（根據持有數量和每次製作所需數量）
+// 計算可製作數量（根據持有數量和製作目標數量所需的材料數量）
 const craftableAmount = computed(() => {
     if (treeData.value.length === 0) return 0;
     
@@ -93,10 +94,11 @@ const craftableAmount = computed(() => {
     const baseMaterials = collectBaseMaterials(treeData.value);
     if (baseMaterials.length === 0) return 0;
     
-    // 找出每種材料可以製作的數量，取最小值
+    // 計算每種材料可以製作的數量
+    // 使用 baseRequiredPerFinalProduct 來計算（這個值不受庫存影響）
     const craftableAmounts = baseMaterials
-        .filter(m => m.requiredPerCraft > 0)
-        .map(m => Math.floor(m.ownedQuantity / m.requiredPerCraft));
+        .filter(m => m.baseRequiredPerFinalProduct > 0)
+        .map(m => Math.floor(m.ownedQuantity / m.baseRequiredPerFinalProduct));
     
     if (craftableAmounts.length === 0) return 0;
     return Math.min(...craftableAmounts);
@@ -191,6 +193,7 @@ async function loadMaterialTree() {
                 id: itemInfo.id,
                 name: itemInfo.name,
                 requiredPerCraft: ing.amount,
+                baseRequiredPerFinalProduct: ing.amount, // 根節點的基礎需求量就是每次製作的需求量
                 totalRequired: ing.amount * localCraftAmount.value,
                 ownedQuantity: 0,
                 unitPrice: 0,
@@ -238,11 +241,14 @@ async function toggleExpand(node: MaterialTreeNode) {
                 // 計算子材料需要的數量（根據父材料的需購買數量）
                 const parentNeedToCraft = Math.ceil(Math.max(0, node.needToBuy) / node.requiredPerCraft);
                 const childRequired = ing.amount * parentNeedToCraft;
+                // 計算每製作一個最終產品所需的此材料數量（用於可製作數量計算）
+                const childBaseRequired = ing.amount * node.baseRequiredPerFinalProduct;
 
                 const childNode: MaterialTreeNode = {
                     id: itemInfo.id,
                     name: itemInfo.name,
                     requiredPerCraft: ing.amount,
+                    baseRequiredPerFinalProduct: childBaseRequired, // 繼承父節點的比例計算
                     totalRequired: childRequired,
                     ownedQuantity: 0,
                     unitPrice: 0,
