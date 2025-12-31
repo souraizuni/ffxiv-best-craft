@@ -193,6 +193,14 @@ const crystalGroups = computed(() => {
                 </div>
             </template>
 
+            <!-- 欄位標籤 -->
+            <div class="crystal-header-labels">
+                <span class="label-name">{{ $t('crystal-name-label') }}</span>
+                <span class="label-quantity">{{ $t('quantity') }}</span>
+                <span class="label-price">{{ $t('unit-price') }}</span>
+                <span class="label-subtotal">{{ $t('subtotal') }}</span>
+            </div>
+
             <!-- 碎晶 -->
             <div class="crystal-group">
                 <div class="group-title">{{ $t('crystal-shards') }}</div>
@@ -405,6 +413,35 @@ const crystalGroups = computed(() => {
     align-items: center;
 }
 
+.crystal-header-labels {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    background: var(--el-fill-color);
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 13px;
+    color: var(--el-text-color-secondary);
+}
+
+.crystal-header-labels .label-name {
+    min-width: 80px;
+    flex: 1;
+}
+
+.crystal-header-labels .label-quantity,
+.crystal-header-labels .label-price {
+    width: 100px;
+    text-align: center;
+    margin-right: 8px;
+}
+
+.crystal-header-labels .label-subtotal {
+    min-width: 80px;
+    text-align: right;
+}
+
 .crystal-group {
     margin-bottom: 16px;
 }
@@ -502,6 +539,7 @@ crystal-total-cost = 水晶总成本
 crystal-shards = 碎晶
 crystal-crystals = 水晶
 crystal-clusters = 晶簇
+crystal-name-label = 名称
 quantity = 数量
 unit-price = 单价
 material-inventory = 材料库存
@@ -524,6 +562,7 @@ crystal-total-cost = 水晶總成本
 crystal-shards = 碎晶
 crystal-crystals = 水晶
 crystal-clusters = 晶簇
+crystal-name-label = 名稱
 quantity = 數量
 unit-price = 單價
 material-inventory = 材料庫存
@@ -546,6 +585,7 @@ crystal-total-cost = Crystal Total Cost
 crystal-shards = Shards
 crystal-crystals = Crystals
 crystal-clusters = Clusters
+crystal-name-label = Name
 quantity = Quantity
 unit-price = Unit Price
 material-inventory = Material Inventory
@@ -568,6 +608,7 @@ crystal-total-cost = クリスタル総コスト
 crystal-shards = シャード
 crystal-crystals = クリスタル
 crystal-clusters = クラスター
+crystal-name-label = 名前
 quantity = 数量
 unit-price = 単価
 material-inventory = 素材在庫
