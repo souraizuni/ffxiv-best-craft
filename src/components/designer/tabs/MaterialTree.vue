@@ -44,12 +44,12 @@ export interface MaterialTreeNode {
     requiredPerCraft: number;           // 每次製作所需數量（製作父材料）
     baseRequiredPerFinalProduct: number; // 每製作一個最終產品所需的材料數量（用於計算可製作數量）
     totalRequired: number;              // 總共需要數量（根據目標製作數量計算）
-    ownedQuantity: number;              // 已擁有數量（可製作材料的現有庫存，用於減少需製作量）
-    ownedUnitPrice: number;             // 已擁有半成品的單價（市場購買價）
-    ownedSubtotal: number;              // 已擁有半成品的小計（已擁有數量 × 單價）
-    purchasedQuantity: number;          // 購買數量（使用者輸入的實際購買量）
-    unitPrice: number;                  // 單價
-    subtotal: number;                   // 小計（購買數量 × 單價）
+    ownedQuantity: number;              // 已擁有數量（手上現有的庫存）
+    ownedCost: number;                  // 已擁有成本（這些庫存的總取得成本，直接輸入總額）
+    needToBuy: number;                  // 還需購買數量（計算值：總需求 - 已擁有，最小為 0）
+    unitPrice: number;                  // 購買單價（市場價格）
+    purchaseCost: number;               // 購買成本（計算值：還需購買 × 單價）
+    totalCost: number;                  // 總成本（計算值：已擁有成本 + 購買成本）
     recipeId?: number;                  // 若此材料可製作，則有配方 ID
     canCraft: boolean;                  // 是否可以製作
     expanded: boolean;                  // 是否展開子材料（展開時才計入成本）
@@ -124,7 +124,7 @@ watch(localCraftAmount, () => {
     recalculateAll();
 });
 
-// 計算可製作數量（根據購買數量和每個最終產品所需的材料數量）
+// 計算可製作數量（根據已擁有數量和每個最終產品所需的材料數量）
 const craftableAmount = computed(() => {
     if (treeData.value.length === 0) {
         bottleneckMaterialId.value = null;
@@ -147,10 +147,8 @@ const craftableAmount = computed(() => {
     
     for (const m of baseMaterials) {
         if (m.baseRequiredPerFinalProduct > 0) {
-            // 對於可製作但未展開的材料，有效庫存 = 購買數量 + 已擁有成品數量
-            // 對於不可製作的材料，只計算購買數量
-            const effectiveQuantity = m.purchasedQuantity + (m.canCraft ? m.ownedQuantity : 0);
-            const craftable = Math.floor(effectiveQuantity / m.baseRequiredPerFinalProduct);
+            // 有效庫存 = 已擁有數量（木桶理論只看實際擁有多少）
+            const craftable = Math.floor(m.ownedQuantity / m.baseRequiredPerFinalProduct);
             if (craftable < minCraftable) {
                 minCraftable = craftable;
                 materialBottleneckId = m.id;
@@ -294,18 +292,24 @@ async function loadMaterialTree() {
             // 從材料庫存取得預設值
             const inventoryMaterial = useInventoryData.value ? materialsInventory.getMaterial(itemInfo.id) : null;
 
+            const totalReq = ing.amount * localCraftAmount.value;
+            const ownedQty = inventoryMaterial?.quantity ?? 0;
+            const price = inventoryMaterial?.unitPrice ?? 0;
+            const needBuy = Math.max(0, totalReq - ownedQty);
+            const purchCost = needBuy * price;
+
             const node: MaterialTreeNode = {
                 id: itemInfo.id,
                 name: itemInfo.name,
                 requiredPerCraft: ing.amount,
                 baseRequiredPerFinalProduct: ing.amount, // 根節點的基礎需求量就是每次製作的需求量
-                totalRequired: ing.amount * localCraftAmount.value,
-                ownedQuantity: 0,  // 已擁有的成品數量
-                ownedUnitPrice: 0, // 已擁有半成品的單價
-                ownedSubtotal: 0,  // 已擁有半成品的小計
-                purchasedQuantity: inventoryMaterial?.quantity ?? 0,
-                unitPrice: inventoryMaterial?.unitPrice ?? 0,
-                subtotal: 0,
+                totalRequired: totalReq,
+                ownedQuantity: ownedQty,  // 已擁有的數量
+                ownedCost: 0,             // 已擁有的總成本（使用者輸入）
+                needToBuy: needBuy,       // 還需購買
+                unitPrice: price,         // 購買單價
+                purchaseCost: purchCost,  // 購買成本
+                totalCost: purchCost,     // 總成本 = 已擁有成本 + 購買成本
                 recipeId: recipe?.id,
                 canCraft: recipe !== null,
                 expanded: false,
@@ -314,7 +318,6 @@ async function loadMaterialTree() {
                 children: [],
                 depth: 0,
             };
-            node.subtotal = node.purchasedQuantity * node.unitPrice;
             nodes.push(node);
         }
 
@@ -398,18 +401,23 @@ async function toggleExpand(node: MaterialTreeNode) {
                 // 從材料庫存取得預設值
                 const inventoryMaterial = useInventoryData.value ? materialsInventory.getMaterial(itemInfo.id) : null;
 
+                const ownedQty = inventoryMaterial?.quantity ?? 0;
+                const price = inventoryMaterial?.unitPrice ?? 0;
+                const needBuy = Math.max(0, childRequired - ownedQty);
+                const purchCost = needBuy * price;
+
                 const childNode: MaterialTreeNode = {
                     id: itemInfo.id,
                     name: itemInfo.name,
                     requiredPerCraft: ing.amount,
                     baseRequiredPerFinalProduct: childBaseRequired, // 繼承父節點的比例計算
                     totalRequired: childRequired,
-                    ownedQuantity: 0,  // 已擁有的成品數量
-                    ownedUnitPrice: 0, // 已擁有半成品的單價
-                    ownedSubtotal: 0,  // 已擁有半成品的小計
-                    purchasedQuantity: inventoryMaterial?.quantity ?? 0,
-                    unitPrice: inventoryMaterial?.unitPrice ?? 0,
-                    subtotal: (inventoryMaterial?.quantity ?? 0) * (inventoryMaterial?.unitPrice ?? 0),
+                    ownedQuantity: ownedQty,  // 已擁有的數量
+                    ownedCost: 0,             // 已擁有的總成本（使用者輸入）
+                    needToBuy: needBuy,       // 還需購買
+                    unitPrice: price,         // 購買單價
+                    purchaseCost: purchCost,  // 購買成本
+                    totalCost: purchCost,     // 總成本
                     recipeId: recipe?.id,
                     canCraft: recipe !== null,
                     expanded: false,
@@ -527,7 +535,7 @@ function removeCrystalsFromRecipe(recipeId: number) {
 }
 
 // 更新節點數量
-function updateNodeQuantity(node: MaterialTreeNode, field: 'purchasedQuantity' | 'unitPrice' | 'ownedQuantity' | 'ownedUnitPrice', value: number) {
+function updateNodeQuantity(node: MaterialTreeNode, field: 'ownedQuantity' | 'ownedCost' | 'unitPrice', value: number) {
     node[field] = value;
     recalculateNode(node, localCraftAmount.value);
     recalculateAll();
@@ -551,10 +559,12 @@ watch(includeCrystalCost, () => {
 function recalculateNode(node: MaterialTreeNode, craftAmount: number) {
     // 更新總需求量
     node.totalRequired = node.baseRequiredPerFinalProduct * craftAmount;
-    // 計算小計 = 購買數量 × 單價
-    node.subtotal = node.purchasedQuantity * node.unitPrice;
-    // 計算已擁有半成品的小計
-    node.ownedSubtotal = node.ownedQuantity * node.ownedUnitPrice;
+    // 計算還需購買數量 = 總需求 - 已擁有（最小為 0）
+    node.needToBuy = Math.max(0, node.totalRequired - node.ownedQuantity);
+    // 計算購買成本 = 還需購買 × 單價
+    node.purchaseCost = node.needToBuy * node.unitPrice;
+    // 計算總成本 = 已擁有成本 + 購買成本
+    node.totalCost = node.ownedCost + node.purchaseCost;
 
     // 如果有子節點，重新計算子節點
     if (node.expanded && node.children.length > 0) {
@@ -609,14 +619,8 @@ function calculateTotalCost(nodes: MaterialTreeNode[]): number {
             // 展開狀態：遞迴計算子材料成本
             total += calculateTotalCost(node.children);
         } else {
-            // 收合狀態：計算此節點的成本
-            // 對於可製作的材料，成本 = 購買成本 + 已擁有半成品成本
-            // 對於不可製作的材料，成本 = 購買成本
-            if (node.canCraft) {
-                total += node.subtotal + node.ownedSubtotal;
-            } else {
-                total += node.subtotal;
-            }
+            // 收合狀態：計算此節點的總成本（已擁有成本 + 購買成本）
+            total += node.totalCost;
         }
     }
     return total;
@@ -713,11 +717,11 @@ defineExpose({
                 <span class="col-name">{{ $t('material-name') }}</span>
                 <span class="col-required">{{ $t('total-required') }}</span>
                 <span class="col-owned-stock">{{ $t('owned-quantity') }}</span>
-                <span class="col-owned-price">{{ $t('owned-unit-price') }}</span>
-                <span class="col-owned-subtotal">{{ $t('owned-subtotal') }}</span>
-                <span class="col-owned">{{ $t('purchased-quantity') }}</span>
+                <span class="col-owned-cost">{{ $t('owned-cost') }}</span>
+                <span class="col-need-buy">{{ $t('need-to-buy') }}</span>
                 <span class="col-price">{{ $t('unit-price') }}</span>
-                <span class="col-subtotal">{{ $t('subtotal') }}</span>
+                <span class="col-purchase-cost">{{ $t('purchase-cost') }}</span>
+                <span class="col-total-cost">{{ $t('total-cost') }}</span>
             </div>
 
             <!-- 遞迴渲染樹節點 -->
@@ -842,47 +846,29 @@ const MaterialTreeNodeVue = defineComponent({
                 ]),
                 // 總需求
                 h('span', { class: 'col-required' }, formatNumber(props.node.totalRequired)),
-                // 已擁有（只對可製作且未展開的材料顯示）
+                // 已擁有數量
                 h('div', { class: 'col-owned-stock' }, [
-                    props.node.canCraft && !props.node.expanded
-                        ? h(ElInputNumber, {
-                            modelValue: props.node.ownedQuantity,
-                            'onUpdate:modelValue': (val: number) => emit('update-quantity', props.node, 'ownedQuantity', val ?? 0),
-                            min: 0,
-                            size: 'small',
-                            controlsPosition: 'right',
-                        })
-                        : h('span', { class: 'na-text' }, '-'),
-                ]),
-                // 已擁有單價（只對可製作且未展開的材料顯示）
-                h('div', { class: 'col-owned-price' }, [
-                    props.node.canCraft && !props.node.expanded
-                        ? h(ElInputNumber, {
-                            modelValue: props.node.ownedUnitPrice,
-                            'onUpdate:modelValue': (val: number) => emit('update-quantity', props.node, 'ownedUnitPrice', val ?? 0),
-                            min: 0,
-                            size: 'small',
-                            controlsPosition: 'right',
-                        })
-                        : h('span', { class: 'na-text' }, '-'),
-                ]),
-                // 已擁有小計（只對可製作且未展開的材料顯示）
-                h('span', { class: 'col-owned-subtotal' }, 
-                    props.node.canCraft && !props.node.expanded
-                        ? formatNumber(props.node.ownedSubtotal)
-                        : '-'
-                ),
-                // 購買數量
-                h('div', { class: 'col-owned' }, [
                     h(ElInputNumber, {
-                        modelValue: props.node.purchasedQuantity,
-                        'onUpdate:modelValue': (val: number) => emit('update-quantity', props.node, 'purchasedQuantity', val ?? 0),
+                        modelValue: props.node.ownedQuantity,
+                        'onUpdate:modelValue': (val: number) => emit('update-quantity', props.node, 'ownedQuantity', val ?? 0),
                         min: 0,
                         size: 'small',
                         controlsPosition: 'right',
                     }),
                 ]),
-                // 單價
+                // 已擁有成本（直接輸入總額）
+                h('div', { class: 'col-owned-cost' }, [
+                    h(ElInputNumber, {
+                        modelValue: props.node.ownedCost,
+                        'onUpdate:modelValue': (val: number) => emit('update-quantity', props.node, 'ownedCost', val ?? 0),
+                        min: 0,
+                        size: 'small',
+                        controlsPosition: 'right',
+                    }),
+                ]),
+                // 還需購買（計算值）
+                h('span', { class: 'col-need-buy' }, formatNumber(props.node.needToBuy)),
+                // 購買單價
                 h('div', { class: 'col-price' }, [
                     h(ElInputNumber, {
                         modelValue: props.node.unitPrice,
@@ -892,8 +878,10 @@ const MaterialTreeNodeVue = defineComponent({
                         controlsPosition: 'right',
                     }),
                 ]),
-                // 小計
-                h('span', { class: 'col-subtotal' }, formatNumber(props.node.subtotal)),
+                // 購買成本（計算值）
+                h('span', { class: 'col-purchase-cost' }, formatNumber(props.node.purchaseCost)),
+                // 總成本（計算值）
+                h('span', { class: 'col-total-cost' }, formatNumber(props.node.totalCost)),
             ]),
             // 子節點
             props.node.expanded && props.node.children.length > 0
@@ -983,19 +971,18 @@ const MaterialTreeNodeVue = defineComponent({
     font-family: 'Consolas', 'Monaco', monospace;
 }
 
-:deep(.col-owned),
-:deep(.col-owned-stock),
-:deep(.col-owned-price),
-:deep(.col-price) {
-    width: 100px;
+:deep(.col-need-buy),
+:deep(.col-purchase-cost),
+:deep(.col-total-cost) {
+    width: 80px;
+    text-align: right;
+    font-family: 'Consolas', 'Monaco', monospace;
 }
 
-:deep(.col-owned-stock .na-text),
-:deep(.col-owned-price .na-text),
-:deep(.col-owned-subtotal) {
-    display: block;
-    text-align: center;
-    color: var(--el-text-color-placeholder);
+:deep(.col-owned-stock),
+:deep(.col-owned-cost),
+:deep(.col-price) {
+    width: 100px;
 }
 
 :deep(.expand-btn) {
