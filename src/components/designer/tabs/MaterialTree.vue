@@ -29,6 +29,7 @@ import {
     ElDivider,
     ElTag,
     ElTooltip,
+    ElCheckbox,
 } from 'element-plus';
 import { Refresh, Warning, Loading } from '@element-plus/icons-vue';
 import useSettingsStore from '@/stores/settings';
@@ -53,6 +54,17 @@ export interface MaterialTreeNode {
     depth: number;                      // 樹的深度
 }
 
+// 水晶資料結構
+export interface CrystalData {
+    id: number;                         // 水晶 ID
+    name: string;                       // 水晶名稱
+    requiredPerCraft: number;           // 每次製作所需數量
+    totalRequired: number;              // 總共需要數量
+    purchasedQuantity: number;          // 購買數量
+    unitPrice: number;                  // 單價
+    subtotal: number;                   // 小計
+}
+
 const props = defineProps<{
     recipeId?: number;
     targetAmount: number;
@@ -69,6 +81,10 @@ const settingsStore = useSettingsStore();
 const treeData = ref<MaterialTreeNode[]>([]);
 const loading = ref(false);
 const loadError = ref<string | null>(null);
+
+// 水晶資料
+const crystalData = ref<CrystalData[]>([]);
+const includeCrystalCost = ref(false); // 是否計入水晶成本
 
 // 瓶頸材料 ID（木桶理論中限制可製作數量的材料）
 const bottleneckMaterialId = ref<number | null>(null);
@@ -123,9 +139,16 @@ const craftableAmount = computed(() => {
     return minCraftable;
 });
 
-// 計算總購買成本（所有購買材料的成本）
+// 計算水晶總成本
+const totalCrystalCost = computed(() => {
+    if (!includeCrystalCost.value) return 0;
+    return crystalData.value.reduce((sum, c) => sum + c.subtotal, 0);
+});
+
+// 計算總購買成本（所有購買材料的成本 + 水晶成本）
 const totalPurchaseCost = computed(() => {
-    return calculateTotalCost(treeData.value);
+    const materialCost = calculateTotalCost(treeData.value);
+    return materialCost + totalCrystalCost.value;
 });
 
 // 計算單個成本（總成本 ÷ 可製作數量）
@@ -161,7 +184,7 @@ async function findRecipeByItemId(
     }
 }
 
-// 取得配方材料
+// 取得配方材料（不含水晶）
 async function fetchIngredients(
     dataSource: DataSource,
     recipeId: number,
@@ -176,6 +199,16 @@ async function fetchIngredients(
     const filtered = result.filter(v => v.ingredient_id >= 20);
     ingredientsCache.set(recipeId, filtered);
     return filtered;
+}
+
+// 取得配方水晶需求
+async function fetchCrystals(
+    dataSource: DataSource,
+    recipeId: number,
+): Promise<ItemWithAmount[]> {
+    const result = await dataSource.recipesIngredients(recipeId);
+    // 只保留水晶（ID < 20）
+    return result.filter(v => v.ingredient_id < 20);
 }
 
 // 取得物品資訊
@@ -204,11 +237,14 @@ async function loadMaterialTree() {
     loading.value = true;
     loadError.value = null;
     treeData.value = [];
+    crystalData.value = [];
 
     try {
         const dataSource = await settingsStore.getDataSource();
         const ingredients = await fetchIngredients(dataSource, props.recipeId);
+        const crystals = await fetchCrystals(dataSource, props.recipeId);
 
+        // 載入材料節點
         const nodes: MaterialTreeNode[] = [];
         for (const ing of ingredients) {
             const itemInfo = await fetchItemInfo(dataSource, ing.ingredient_id);
@@ -233,7 +269,23 @@ async function loadMaterialTree() {
             nodes.push(node);
         }
 
+        // 載入水晶資料
+        const crystalNodes: CrystalData[] = [];
+        for (const crystal of crystals) {
+            const itemInfo = await fetchItemInfo(dataSource, crystal.ingredient_id);
+            crystalNodes.push({
+                id: itemInfo.id,
+                name: itemInfo.name,
+                requiredPerCraft: crystal.amount,
+                totalRequired: crystal.amount * localCraftAmount.value,
+                purchasedQuantity: 0,
+                unitPrice: 0,
+                subtotal: 0,
+            });
+        }
+
         treeData.value = nodes;
+        crystalData.value = crystalNodes;
         recalculateAll();
     } catch (e: any) {
         console.error('Failed to load material tree:', e);
@@ -305,6 +357,12 @@ function updateNodeQuantity(node: MaterialTreeNode, field: 'purchasedQuantity' |
     recalculateAll();
 }
 
+// 更新水晶數量
+function updateCrystalQuantity(crystal: CrystalData, field: 'purchasedQuantity' | 'unitPrice', value: number) {
+    crystal[field] = value;
+    crystal.subtotal = crystal.purchasedQuantity * crystal.unitPrice;
+}
+
 // 重新計算單一節點
 function recalculateNode(node: MaterialTreeNode) {
     // 計算小計 = 購買數量 × 單價
@@ -324,6 +382,12 @@ function recalculateAll() {
     for (const node of treeData.value) {
         node.totalRequired = node.requiredPerCraft * localCraftAmount.value;
         recalculateNode(node);
+    }
+
+    // 重新計算水晶需求量
+    for (const crystal of crystalData.value) {
+        crystal.totalRequired = crystal.requiredPerCraft * localCraftAmount.value;
+        crystal.subtotal = crystal.purchasedQuantity * crystal.unitPrice;
     }
 
     // 收集所有基礎材料（葉節點或未展開的節點）
@@ -424,6 +488,9 @@ defineExpose({
             <div class="summary-item">
                 <span class="summary-label">{{ $t('total-purchase-cost') }}:</span>
                 <span class="summary-value warning">{{ formatNumber(totalPurchaseCost) }}</span>
+                <span v-if="includeCrystalCost && totalCrystalCost > 0" class="summary-detail">
+                    ({{ $t('includes-crystal') }}: {{ formatNumber(totalCrystalCost) }})
+                </span>
             </div>
             <div class="summary-item" v-if="craftableAmount > 0">
                 <span class="summary-label">{{ $t('cost-per-craft') }}:</span>
@@ -463,6 +530,60 @@ defineExpose({
                 @toggle-expand="toggleExpand"
                 @update-quantity="updateNodeQuantity"
             />
+        </div>
+
+        <!-- 水晶成本區塊 -->
+        <div v-if="crystalData.length > 0" class="crystal-section">
+            <div class="crystal-header">
+                <el-checkbox v-model="includeCrystalCost" size="small">
+                    {{ $t('include-crystal-cost') }}
+                </el-checkbox>
+                <span v-if="includeCrystalCost" class="crystal-total">
+                    {{ $t('crystal-total') }}: {{ formatNumber(totalCrystalCost) }}
+                </span>
+            </div>
+            
+            <!-- 水晶表格 -->
+            <div class="crystal-table" :class="{ disabled: !includeCrystalCost }">
+                <!-- 表頭 -->
+                <div class="crystal-header-row">
+                    <span class="col-name">{{ $t('crystal-name') }}</span>
+                    <span class="col-required">{{ $t('total-required') }}</span>
+                    <span class="col-owned">{{ $t('purchased-quantity') }}</span>
+                    <span class="col-price">{{ $t('unit-price') }}</span>
+                    <span class="col-subtotal">{{ $t('subtotal') }}</span>
+                </div>
+                
+                <!-- 水晶列表 -->
+                <div v-for="crystal in crystalData" :key="crystal.id" class="crystal-row">
+                    <span class="col-name">
+                        <span class="crystal-icon">💎</span>
+                        {{ crystal.name }}
+                    </span>
+                    <span class="col-required">{{ formatNumber(crystal.totalRequired) }}</span>
+                    <div class="col-owned">
+                        <el-input-number
+                            v-model="crystal.purchasedQuantity"
+                            :min="0"
+                            size="small"
+                            controls-position="right"
+                            :disabled="!includeCrystalCost"
+                            @change="updateCrystalQuantity(crystal, 'purchasedQuantity', $event ?? 0)"
+                        />
+                    </div>
+                    <div class="col-price">
+                        <el-input-number
+                            v-model="crystal.unitPrice"
+                            :min="0"
+                            size="small"
+                            controls-position="right"
+                            :disabled="!includeCrystalCost"
+                            @change="updateCrystalQuantity(crystal, 'unitPrice', $event ?? 0)"
+                        />
+                    </div>
+                    <span class="col-subtotal">{{ formatNumber(crystal.subtotal) }}</span>
+                </div>
+            </div>
         </div>
 
         <!-- 空狀態 -->
@@ -740,6 +861,72 @@ const MaterialTreeNodeVue = defineComponent({
     font-size: 12px;
     color: var(--el-text-color-secondary);
 }
+
+.summary-detail {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+    margin-left: 4px;
+}
+
+/* 水晶區塊樣式 */
+.crystal-section {
+    margin-top: 20px;
+    border: 1px solid var(--el-border-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.crystal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: var(--el-color-primary-light-9);
+    border-bottom: 1px solid var(--el-border-color);
+}
+
+.crystal-total {
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--el-color-primary);
+}
+
+.crystal-table {
+    transition: opacity 0.2s;
+}
+
+.crystal-table.disabled {
+    opacity: 0.5;
+}
+
+.crystal-header-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--el-fill-color-light);
+    font-weight: bold;
+    font-size: 12px;
+    border-bottom: 1px solid var(--el-border-color);
+}
+
+.crystal-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.crystal-row:last-child {
+    border-bottom: none;
+}
+
+.crystal-row:hover {
+    background: var(--el-fill-color-lighter);
+}
+
+.crystal-icon {
+    margin-right: 6px;
+}
 </style>
 
 <fluent locale="zh-CN">
@@ -755,6 +942,10 @@ craftable-amount = 可制作数量
 total-purchase-cost = 总购买成本
 cost-per-craft = 单个成本
 unit-pieces = 个
+include-crystal-cost = 计入水晶成本
+crystal-name = 水晶名称
+crystal-total = 水晶总计
+includes-crystal = 含水晶
 </fluent>
 
 <fluent locale="zh-TW">
@@ -770,6 +961,10 @@ craftable-amount = 可製作數量
 total-purchase-cost = 總購買成本
 cost-per-craft = 單個成本
 unit-pieces = 個
+include-crystal-cost = 計入水晶成本
+crystal-name = 水晶名稱
+crystal-total = 水晶總計
+includes-crystal = 含水晶
 </fluent>
 
 <fluent locale="en-US">
@@ -785,6 +980,10 @@ craftable-amount = Craftable Amount
 total-purchase-cost = Total Purchase Cost
 cost-per-craft = Cost Per Craft
 unit-pieces = pcs
+include-crystal-cost = Include Crystal Cost
+crystal-name = Crystal
+crystal-total = Crystal Total
+includes-crystal = incl. crystal
 </fluent>
 
 <fluent locale="ja-JP">
@@ -800,4 +999,8 @@ craftable-amount = 製作可能数
 total-purchase-cost = 総購入コスト
 cost-per-craft = 単体コスト
 unit-pieces = 個
+include-crystal-cost = クリスタルコストを含める
+crystal-name = クリスタル
+crystal-total = クリスタル合計
+includes-crystal = クリスタル含む
 </fluent>
