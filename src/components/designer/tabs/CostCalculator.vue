@@ -314,43 +314,56 @@ function formatNumber(num: number): string {
             />
 
             <!-- 新增材料表單 -->
-            <div class="add-material-form">
-                <el-input
-                    v-model="newMaterialName"
-                    :placeholder="$t('material-name')"
-                    size="small"
-                    class="material-name-input"
-                />
-                <el-input-number
-                    v-model="newMaterialPrice"
-                    :placeholder="$t('unit-price')"
-                    :min="0"
-                    size="small"
-                    class="price-input"
-                    controls-position="right"
-                />
-                <el-input-number
-                    v-model="newMaterialQuantity"
-                    :min="0"
-                    size="small"
-                    class="quantity-input"
-                    controls-position="right"
-                    :placeholder="$t('owned-quantity')"
-                />
-                <el-input-number
-                    v-model="newMaterialRequiredPerCraft"
-                    :min="1"
-                    size="small"
-                    class="required-input"
-                    controls-position="right"
-                    :placeholder="$t('required-per-craft')"
-                />
-                <el-checkbox v-model="newMaterialIncludeTax" size="small">
-                    {{ $t('include-tax') }}
-                </el-checkbox>
-                <el-button type="primary" size="small" @click="addMaterial" :icon="Plus">
-                    {{ $t('add') }}
-                </el-button>
+            <div class="add-material-section">
+                <div class="add-material-header">
+                    <span class="section-title">{{ $t('add-material-title') }}</span>
+                </div>
+                <div class="add-material-labels">
+                    <span class="label-name">{{ $t('material-name') }}</span>
+                    <span class="label-price">{{ $t('unit-price') }}</span>
+                    <span class="label-quantity">{{ $t('purchased-quantity') }}</span>
+                    <span class="label-required">{{ $t('required-per-craft') }}</span>
+                    <span class="label-tax">{{ $t('include-tax') }}</span>
+                    <span class="label-action"></span>
+                </div>
+                <div class="add-material-form">
+                    <el-input
+                        v-model="newMaterialName"
+                        :placeholder="$t('material-name')"
+                        size="small"
+                        class="material-name-input"
+                    />
+                    <el-input-number
+                        v-model="newMaterialPrice"
+                        :placeholder="$t('unit-price')"
+                        :min="0"
+                        size="small"
+                        class="price-input"
+                        controls-position="right"
+                    />
+                    <el-input-number
+                        v-model="newMaterialQuantity"
+                        :min="0"
+                        size="small"
+                        class="quantity-input"
+                        controls-position="right"
+                        :placeholder="$t('purchased-quantity')"
+                    />
+                    <el-input-number
+                        v-model="newMaterialRequiredPerCraft"
+                        :min="1"
+                        size="small"
+                        class="required-input"
+                        controls-position="right"
+                        :placeholder="$t('required-per-craft')"
+                    />
+                    <el-checkbox v-model="newMaterialIncludeTax" size="small">
+                        {{ $t('include-tax') }}
+                    </el-checkbox>
+                    <el-button type="primary" size="small" @click="addMaterial" :icon="Plus">
+                        {{ $t('add') }}
+                    </el-button>
+                </div>
             </div>
 
             <el-divider />
@@ -528,6 +541,49 @@ function formatNumber(num: number): string {
     gap: 8px;
 }
 
+.add-material-section {
+    margin-bottom: 10px;
+}
+
+.add-material-header {
+    margin-bottom: 8px;
+}
+
+.section-title {
+    font-weight: bold;
+    font-size: 14px;
+    color: var(--el-text-color-primary);
+}
+
+.add-material-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 5px;
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+}
+
+.label-name {
+    width: 150px;
+}
+
+.label-price,
+.label-quantity,
+.label-required {
+    width: 90px;
+    text-align: center;
+}
+
+.label-tax {
+    width: 50px;
+}
+
+.label-action {
+    width: 60px;
+}
+
 .add-material-form {
     display: flex;
     flex-wrap: wrap;
@@ -597,10 +653,12 @@ clear-all = 清空
 material-name = 材料名称
 unit-price = 单价
 owned-quantity = 持有
+purchased-quantity = 购买数量
 required-per-craft = 需求
 include-tax = 含税
 subtotal = 小计
 add = 添加
+add-material-title = 手动添加材料
 cost-summary = 成本汇总
 subtotal-before-tax = 税前小计
 tax-amount = 税额
@@ -631,10 +689,12 @@ clear-all = 清空
 material-name = 材料名稱
 unit-price = 單價
 owned-quantity = 持有
+purchased-quantity = 購買數量
 required-per-craft = 需求
 include-tax = 含稅
 subtotal = 小計
 add = 新增
+add-material-title = 手動新增材料
 cost-summary = 成本匯總
 subtotal-before-tax = 稅前小計
 tax-amount = 稅額
@@ -665,10 +725,12 @@ clear-all = Clear All
 material-name = Material Name
 unit-price = Unit Price
 owned-quantity = Owned
+purchased-quantity = Purchased
 required-per-craft = Required
 include-tax = Tax Incl.
 subtotal = Subtotal
 add = Add
+add-material-title = Add Material Manually
 cost-summary = Cost Summary
 subtotal-before-tax = Subtotal Before Tax
 tax-amount = Tax Amount
@@ -723,4 +785,6 @@ tree-cost-summary = ツリー材料コスト集計
 base-materials-count = 基礎材料種類
 types = 種
 tree-total-cost = 購入コスト合計
+purchased-quantity = 購入数量
+add-material-title = 材料を手動追加
 </fluent>

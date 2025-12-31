@@ -70,6 +70,9 @@ const treeData = ref<MaterialTreeNode[]>([]);
 const loading = ref(false);
 const loadError = ref<string | null>(null);
 
+// 瓶頸材料 ID（木桶理論中限制可製作數量的材料）
+const bottleneckMaterialId = ref<number | null>(null);
+
 // 本地製作數量（可在樹狀檢視中獨立設定）
 const localCraftAmount = ref(props.targetAmount || 1);
 
@@ -88,20 +91,36 @@ watch(localCraftAmount, () => {
 
 // 計算可製作數量（根據購買數量和每個最終產品所需的材料數量）
 const craftableAmount = computed(() => {
-    if (treeData.value.length === 0) return 0;
+    if (treeData.value.length === 0) {
+        bottleneckMaterialId.value = null;
+        return 0;
+    }
     
     // 取得所有基礎材料（葉節點或未展開的節點）
     const baseMaterials = collectBaseMaterials(treeData.value);
-    if (baseMaterials.length === 0) return 0;
+    if (baseMaterials.length === 0) {
+        bottleneckMaterialId.value = null;
+        return 0;
+    }
     
-    // 計算每種材料可以製作的數量
-    // 使用 baseRequiredPerFinalProduct 來計算
-    const craftableAmounts = baseMaterials
-        .filter(m => m.baseRequiredPerFinalProduct > 0)
-        .map(m => Math.floor(m.purchasedQuantity / m.baseRequiredPerFinalProduct));
+    // 計算每種材料可以製作的數量，並找出瓶頸
+    let minCraftable = Infinity;
+    let bottleneckId: number | null = null;
     
-    if (craftableAmounts.length === 0) return 0;
-    return Math.min(...craftableAmounts);
+    for (const m of baseMaterials) {
+        if (m.baseRequiredPerFinalProduct > 0) {
+            const craftable = Math.floor(m.purchasedQuantity / m.baseRequiredPerFinalProduct);
+            if (craftable < minCraftable) {
+                minCraftable = craftable;
+                bottleneckId = m.id;
+            }
+        }
+    }
+    
+    bottleneckMaterialId.value = bottleneckId;
+    
+    if (minCraftable === Infinity) return 0;
+    return minCraftable;
 });
 
 // 計算總購買成本（所有購買材料的成本）
@@ -440,6 +459,7 @@ defineExpose({
                 v-for="node in treeData"
                 :key="node.id"
                 :node="node"
+                :bottleneck-id="bottleneckMaterialId"
                 @toggle-expand="toggleExpand"
                 @update-quantity="updateNodeQuantity"
             />
@@ -463,14 +483,19 @@ const MaterialTreeNodeVue = defineComponent({
             type: Object as PropType<MaterialTreeNode>,
             required: true,
         },
+        bottleneckId: {
+            type: Number as PropType<number | null>,
+            default: null,
+        },
     },
     emits: ['toggle-expand', 'update-quantity'],
-    setup(props: { node: MaterialTreeNode }, { emit }: { emit: (event: string, ...args: unknown[]) => void }) {
+    setup(props: { node: MaterialTreeNode; bottleneckId: number | null }, { emit }: { emit: (event: string, ...args: unknown[]) => void }) {
         const indentStyle = computed(() => `${props.node.depth * 24}px`);
+        const isBottleneck = computed(() => props.bottleneckId !== null && props.node.id === props.bottleneckId);
 
         return () => h('div', { class: 'tree-node-wrapper' }, [
             // 節點行
-            h('div', { class: ['tree-node-row', { 'has-children': props.node.canCraft }] }, [
+            h('div', { class: ['tree-node-row', { 'has-children': props.node.canCraft, 'bottleneck': isBottleneck.value }] }, [
                 // 材料名稱
                 h('div', {
                     class: 'col-name',
@@ -486,6 +511,10 @@ const MaterialTreeNodeVue = defineComponent({
                     h('span', { class: 'node-name' }, props.node.name),
                     props.node.canCraft
                         ? h(ElTag, { size: 'small', type: 'success' }, () => '可製作')
+                        : null,
+                    // 瓶頸標記
+                    isBottleneck.value
+                        ? h(ElTag, { size: 'small', type: 'danger' }, () => '🪣 瓶頸')
                         : null,
                 ]),
                 // 總需求
@@ -520,6 +549,7 @@ const MaterialTreeNodeVue = defineComponent({
                         h(MaterialTreeNodeVue, {
                             key: child.id,
                             node: child,
+                            bottleneckId: props.bottleneckId,
                             onToggleExpand: (n: MaterialTreeNode) => emit('toggle-expand', n),
                             onUpdateQuantity: (n: MaterialTreeNode, f: string, v: number) => emit('update-quantity', n, f, v),
                         })
@@ -632,6 +662,11 @@ const MaterialTreeNodeVue = defineComponent({
 :deep(.shortage) {
     color: var(--el-color-danger);
     font-weight: bold;
+}
+
+:deep(.bottleneck) {
+    background: var(--el-color-danger-light-9);
+    border-left: 3px solid var(--el-color-danger);
 }
 
 :deep(.tree-children) {
