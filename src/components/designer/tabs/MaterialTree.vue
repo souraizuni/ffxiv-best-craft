@@ -58,7 +58,10 @@ export interface MaterialTreeNode {
 export interface CrystalData {
     id: number;                         // 水晶 ID
     name: string;                       // 水晶名稱
+    sourceRecipeId: number;             // 來源配方 ID（用於識別水晶屬於哪個材料）
+    sourceMaterialName: string;         // 來源材料名稱（用於顯示）
     requiredPerCraft: number;           // 每次製作所需數量
+    baseRequiredPerFinalProduct: number; // 每製作一個最終產品所需的水晶數量
     totalRequired: number;              // 總共需要數量
     purchasedQuantity: number;          // 購買數量
     unitPrice: number;                  // 單價
@@ -269,19 +272,30 @@ async function loadMaterialTree() {
             nodes.push(node);
         }
 
-        // 載入水晶資料
+        // 載入水晶資料（主配方的水晶）
         const crystalNodes: CrystalData[] = [];
         for (const crystal of crystals) {
             const itemInfo = await fetchItemInfo(dataSource, crystal.ingredient_id);
-            crystalNodes.push({
-                id: itemInfo.id,
-                name: itemInfo.name,
-                requiredPerCraft: crystal.amount,
-                totalRequired: crystal.amount * localCraftAmount.value,
-                purchasedQuantity: 0,
-                unitPrice: 0,
-                subtotal: 0,
-            });
+            // 檢查是否已有相同水晶，如有則合併數量
+            const existingCrystal = crystalNodes.find(c => c.id === itemInfo.id);
+            if (existingCrystal) {
+                existingCrystal.requiredPerCraft += crystal.amount;
+                existingCrystal.baseRequiredPerFinalProduct += crystal.amount;
+                existingCrystal.totalRequired += crystal.amount * localCraftAmount.value;
+            } else {
+                crystalNodes.push({
+                    id: itemInfo.id,
+                    name: itemInfo.name,
+                    sourceRecipeId: props.recipeId!,
+                    sourceMaterialName: '主配方',
+                    requiredPerCraft: crystal.amount,
+                    baseRequiredPerFinalProduct: crystal.amount,
+                    totalRequired: crystal.amount * localCraftAmount.value,
+                    purchasedQuantity: 0,
+                    unitPrice: 0,
+                    subtotal: 0,
+                });
+            }
         }
 
         treeData.value = nodes;
@@ -300,15 +314,18 @@ async function toggleExpand(node: MaterialTreeNode) {
     if (!node.canCraft || !node.recipeId) return;
 
     if (node.expanded) {
-        // 收合
+        // 收合 - 同時移除該節點相關的水晶
         node.expanded = false;
         node.children = [];
+        // 移除來自此配方的水晶
+        removeCrystalsFromRecipe(node.recipeId);
     } else {
         // 展開
         node.loading = true;
         try {
             const dataSource = await settingsStore.getDataSource();
             const ingredients = await fetchIngredients(dataSource, node.recipeId);
+            const crystals = await fetchCrystals(dataSource, node.recipeId);
 
             const children: MaterialTreeNode[] = [];
             for (const ing of ingredients) {
@@ -339,6 +356,33 @@ async function toggleExpand(node: MaterialTreeNode) {
                 children.push(childNode);
             }
 
+            // 載入此材料的水晶需求
+            for (const crystal of crystals) {
+                const itemInfo = await fetchItemInfo(dataSource, crystal.ingredient_id);
+                // 計算水晶需求量：每製作一個父材料需要的水晶量 × 每個最終產品需要的父材料量
+                const crystalBaseRequired = crystal.amount * node.baseRequiredPerFinalProduct;
+                
+                // 檢查是否已有相同水晶，如有則合併數量
+                const existingCrystal = crystalData.value.find(c => c.id === itemInfo.id);
+                if (existingCrystal) {
+                    existingCrystal.baseRequiredPerFinalProduct += crystalBaseRequired;
+                    existingCrystal.totalRequired += crystalBaseRequired * localCraftAmount.value;
+                } else {
+                    crystalData.value.push({
+                        id: itemInfo.id,
+                        name: itemInfo.name,
+                        sourceRecipeId: node.recipeId,
+                        sourceMaterialName: node.name,
+                        requiredPerCraft: crystal.amount,
+                        baseRequiredPerFinalProduct: crystalBaseRequired,
+                        totalRequired: crystalBaseRequired * localCraftAmount.value,
+                        purchasedQuantity: 0,
+                        unitPrice: 0,
+                        subtotal: 0,
+                    });
+                }
+            }
+
             node.children = children;
             node.expanded = true;
         } catch (e) {
@@ -348,6 +392,11 @@ async function toggleExpand(node: MaterialTreeNode) {
         }
     }
     recalculateAll();
+}
+
+// 移除來自特定配方的水晶（收合時使用）
+function removeCrystalsFromRecipe(recipeId: number) {
+    crystalData.value = crystalData.value.filter(c => c.sourceRecipeId !== recipeId);
 }
 
 // 更新節點數量
