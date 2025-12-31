@@ -33,6 +33,7 @@ import {
 } from 'element-plus';
 import { Refresh, Warning, Loading } from '@element-plus/icons-vue';
 import useSettingsStore from '@/stores/settings';
+import { useMaterialsInventoryStore } from '@/stores/materials-inventory';
 import { DataSource } from '@/datasource/source';
 import { ItemWithAmount, RecipeInfo } from '@/libs/Craft';
 
@@ -84,6 +85,7 @@ const emit = defineEmits<{
 }>();
 
 const settingsStore = useSettingsStore();
+const materialsInventory = useMaterialsInventoryStore();
 
 // 樹狀資料
 const treeData = ref<MaterialTreeNode[]>([]);
@@ -93,6 +95,9 @@ const loadError = ref<string | null>(null);
 // 水晶資料
 const crystalData = ref<CrystalData[]>([]);
 const includeCrystalCost = ref(false); // 是否計入水晶成本
+
+// 是否從材料庫存自動帶入數量和價格
+const useInventoryData = ref(true);
 
 // 瓶頸材料 ID（木桶理論中限制可製作數量的材料）
 const bottleneckMaterialId = ref<number | null>(null);
@@ -279,14 +284,17 @@ async function loadMaterialTree() {
             const itemInfo = await fetchItemInfo(dataSource, ing.ingredient_id);
             const recipe = await findRecipeByItemId(dataSource, itemInfo.id, itemInfo.name);
 
+            // 從材料庫存取得預設值
+            const inventoryMaterial = useInventoryData.value ? materialsInventory.getMaterial(itemInfo.id) : null;
+
             const node: MaterialTreeNode = {
                 id: itemInfo.id,
                 name: itemInfo.name,
                 requiredPerCraft: ing.amount,
                 baseRequiredPerFinalProduct: ing.amount, // 根節點的基礎需求量就是每次製作的需求量
                 totalRequired: ing.amount * localCraftAmount.value,
-                purchasedQuantity: 0,
-                unitPrice: 0,
+                purchasedQuantity: inventoryMaterial?.quantity ?? 0,
+                unitPrice: inventoryMaterial?.unitPrice ?? 0,
                 subtotal: 0,
                 recipeId: recipe?.id,
                 canCraft: recipe !== null,
@@ -295,6 +303,7 @@ async function loadMaterialTree() {
                 children: [],
                 depth: 0,
             };
+            node.subtotal = node.purchasedQuantity * node.unitPrice;
             nodes.push(node);
         }
 
@@ -307,6 +316,9 @@ async function loadMaterialTree() {
                 materialName: '主配方',
                 baseRequiredPerFinalProduct: crystal.amount,
             };
+            
+            // 從材料庫存取得水晶預設值
+            const inventoryCrystal = useInventoryData.value ? materialsInventory.getCrystal(itemInfo.id) : null;
             
             // 檢查是否已有相同水晶，如有則合併數量
             const existingCrystal = crystalNodes.find(c => c.id === itemInfo.id);
@@ -321,9 +333,9 @@ async function loadMaterialTree() {
                     contributions: [contribution],
                     baseRequiredPerFinalProduct: crystal.amount,
                     totalRequired: crystal.amount * localCraftAmount.value,
-                    purchasedQuantity: 0,
-                    unitPrice: 0,
-                    subtotal: 0,
+                    purchasedQuantity: inventoryCrystal?.quantity ?? 0,
+                    unitPrice: inventoryCrystal?.unitPrice ?? 0,
+                    subtotal: (inventoryCrystal?.quantity ?? 0) * (inventoryCrystal?.unitPrice ?? 0),
                 });
             }
         }
@@ -367,15 +379,18 @@ async function toggleExpand(node: MaterialTreeNode) {
                 // 計算每製作一個最終產品所需的此材料數量（用於可製作數量計算）
                 const childBaseRequired = ing.amount * node.baseRequiredPerFinalProduct;
 
+                // 從材料庫存取得預設值
+                const inventoryMaterial = useInventoryData.value ? materialsInventory.getMaterial(itemInfo.id) : null;
+
                 const childNode: MaterialTreeNode = {
                     id: itemInfo.id,
                     name: itemInfo.name,
                     requiredPerCraft: ing.amount,
                     baseRequiredPerFinalProduct: childBaseRequired, // 繼承父節點的比例計算
                     totalRequired: childRequired,
-                    purchasedQuantity: 0,
-                    unitPrice: 0,
-                    subtotal: 0,
+                    purchasedQuantity: inventoryMaterial?.quantity ?? 0,
+                    unitPrice: inventoryMaterial?.unitPrice ?? 0,
+                    subtotal: (inventoryMaterial?.quantity ?? 0) * (inventoryMaterial?.unitPrice ?? 0),
                     recipeId: recipe?.id,
                     canCraft: recipe !== null,
                     expanded: false,
@@ -398,6 +413,9 @@ async function toggleExpand(node: MaterialTreeNode) {
                     baseRequiredPerFinalProduct: crystalBaseRequired,
                 };
                 
+                // 從材料庫存取得水晶預設值
+                const inventoryCrystal = useInventoryData.value ? materialsInventory.getCrystal(itemInfo.id) : null;
+                
                 // 檢查是否已有相同水晶，如有則合併數量
                 const existingCrystal = crystalData.value.find(c => c.id === itemInfo.id);
                 if (existingCrystal) {
@@ -411,9 +429,9 @@ async function toggleExpand(node: MaterialTreeNode) {
                         contributions: [contribution],
                         baseRequiredPerFinalProduct: crystalBaseRequired,
                         totalRequired: crystalBaseRequired * localCraftAmount.value,
-                        purchasedQuantity: 0,
-                        unitPrice: 0,
-                        subtotal: 0,
+                        purchasedQuantity: inventoryCrystal?.quantity ?? 0,
+                        unitPrice: inventoryCrystal?.unitPrice ?? 0,
+                        subtotal: (inventoryCrystal?.quantity ?? 0) * (inventoryCrystal?.unitPrice ?? 0),
                     });
                 }
             }
@@ -571,6 +589,9 @@ defineExpose({
                     controls-position="right"
                 />
             </div>
+            <el-checkbox v-model="useInventoryData" size="small">
+                {{ $t('use-inventory-data') }}
+            </el-checkbox>
             <el-button
                 type="primary"
                 size="small"
@@ -1055,6 +1076,7 @@ total-purchase-cost = 总购买成本
 cost-per-craft = 单个成本
 unit-pieces = 个
 include-crystal-cost = 计入水晶成本
+use-inventory-data = 自动带入库存
 crystal-name = 水晶名称
 crystal-total = 水晶总计
 includes-crystal = 含水晶
@@ -1074,6 +1096,7 @@ total-purchase-cost = 總購買成本
 cost-per-craft = 單個成本
 unit-pieces = 個
 include-crystal-cost = 計入水晶成本
+use-inventory-data = 自動帶入庫存
 crystal-name = 水晶名稱
 crystal-total = 水晶總計
 includes-crystal = 含水晶
@@ -1093,6 +1116,7 @@ total-purchase-cost = Total Purchase Cost
 cost-per-craft = Cost Per Craft
 unit-pieces = pcs
 include-crystal-cost = Include Crystal Cost
+use-inventory-data = Auto-fill from Inventory
 crystal-name = Crystal
 crystal-total = Crystal Total
 includes-crystal = incl. crystal
@@ -1112,6 +1136,7 @@ total-purchase-cost = 総購入コスト
 cost-per-craft = 単体コスト
 unit-pieces = 個
 include-crystal-cost = クリスタルコストを含める
+use-inventory-data = 在庫から自動入力
 crystal-name = クリスタル
 crystal-total = クリスタル合計
 includes-crystal = クリスタル含む

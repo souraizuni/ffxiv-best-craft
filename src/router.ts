@@ -24,6 +24,7 @@ const CustomizeRecipe = () =>
     import('./components/recipe-manager/CustomizeRecipe.vue');
 const DesignerVue = () => import('./components/designer/Page.vue');
 const BOMVue = () => import('./pages/Bom.vue');
+const MaterialsVue = () => import('./pages/Materials.vue');
 const SettingsVue = () => import('./pages/Settings.vue');
 
 const router = createRouter({
@@ -40,6 +41,7 @@ const router = createRouter({
         },
         { path: '/designer', name: 'designer', component: DesignerVue },
         { path: '/bom', name: 'bom', component: BOMVue },
+        { path: '/materials', name: 'materials', component: MaterialsVue },
         { path: '/settings', name: 'settings', component: SettingsVue },
     ],
 });

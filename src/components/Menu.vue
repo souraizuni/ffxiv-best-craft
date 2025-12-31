@@ -25,6 +25,7 @@ import {
     Setting,
     Guide,
     Box,
+    Coin,
 } from '@element-plus/icons-vue';
 import { useRouter } from 'vue-router';
 
@@ -67,6 +68,12 @@ const router = useRouter();
             </el-icon>
             <template #title>{{ $t('bom') }}</template>
         </el-menu-item>
+        <el-menu-item index="/materials">
+            <el-icon>
+                <coin />
+            </el-icon>
+            <template #title>{{ $t('materials') }}</template>
+        </el-menu-item>
         <el-menu-item index="/settings">
             <el-icon>
                 <setting />
@@ -95,6 +102,7 @@ gearsets = 配装
 recipe = 配方
 simulator = 模拟
 bom = 清单
+materials = 材料
 settings = 设置
 </fluent>
 
@@ -103,8 +111,7 @@ guide = 嚮導
 gearsets = 配裝
 recipe = 配方
 simulator = 模擬
-bom = 清單
-settings = 設定
+bom = 清單materials = 材料settings = 設定
 </fluent>
 
 <fluent locale="en-US">
@@ -112,6 +119,7 @@ guide = Wizard
 gearsets = Gearsets
 recipe = Recipes
 bom = BOM
+materials = Materials
 simulator = Simulator
 settings = Settings
 </fluent>
@@ -121,6 +129,7 @@ guide = ガイダンス
 gearsets = 装備
 recipe = フォーミュラ
 bom = 材料リスト
+materials = 素材
 # simulator = デザイン
 settings = 設定
 </fluent>
