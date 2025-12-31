@@ -69,7 +69,7 @@ async function searchMaterials(query: string) {
             const itemMap = new Map<number, string>();
             for (const recipe of result.results) {
                 if (!itemMap.has(recipe.item_id)) {
-                    itemMap.set(recipe.item_id, recipe.name);
+                    itemMap.set(recipe.item_id, recipe.item_name);
                 }
             }
             searchResults.value = Array.from(itemMap.entries()).map(([id, name]) => ({ id, name }));
