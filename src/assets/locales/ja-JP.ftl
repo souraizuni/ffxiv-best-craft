@@ -106,3 +106,27 @@ attributes = 属性
 settings = 設定
 title = { $recipe } （模拟器模式）
 bill-of-material = 材料リスト
+
+# Material Tree
+material-name = 材料名
+total-required = 必要数
+owned-quantity = 所持数
+owned-unit-price = 半製品単価
+owned-subtotal = 半製品小計
+purchased-quantity = 購入数
+unit-price = 単価
+subtotal = 小計
+craft-amount = 製作数
+use-inventory-data = 在庫から読込
+load-material-tree = 材料ツリー読込
+craftable-amount = 製作可能数
+unit-pieces = 個
+total-purchase-cost = 総購入コスト
+includes-crystal = クリスタル含
+cost-per-craft = 単価
+load-error = 読込エラー
+no-recipe-id-error = レシピを先に選択してください
+include-crystal-cost = クリスタルコストを含む
+crystal-total = クリスタル合計
+crystal-name = クリスタル名
+click-load-to-start = 「材料ツリー読込」をクリックして開始

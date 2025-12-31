@@ -188,3 +188,27 @@ select-recipe = 選擇配方
 custom-recipe = 自定義配方
 bill-of-material = 物料清單
 settings = 設定
+
+# Material Tree
+material-name = 材料名稱
+total-required = 總需求
+owned-quantity = 已擁有
+owned-unit-price = 半成品單價
+owned-subtotal = 半成品小計
+purchased-quantity = 購買數量
+unit-price = 單價
+subtotal = 小計
+craft-amount = 製作數量
+use-inventory-data = 從材料庫存帶入
+load-material-tree = 載入材料樹
+craftable-amount = 可製作數量
+unit-pieces = 個
+total-purchase-cost = 總購買成本
+includes-crystal = 含水晶
+cost-per-craft = 單個成本
+load-error = 載入錯誤
+no-recipe-id-error = 請先選擇配方
+include-crystal-cost = 計入水晶成本
+crystal-total = 水晶合計
+crystal-name = 水晶名稱
+click-load-to-start = 點擊「載入材料樹」開始

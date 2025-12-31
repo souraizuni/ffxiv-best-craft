@@ -151,6 +151,30 @@ bill-of-material = Bill of Material
 settings = Settings
 title = { $recipe } (Simulator Mode)
 
+# Material Tree
+material-name = Material Name
+total-required = Total Required
+owned-quantity = Owned
+owned-unit-price = Owned Price
+owned-subtotal = Owned Cost
+purchased-quantity = Purchased
+unit-price = Unit Price
+subtotal = Subtotal
+craft-amount = Craft Amount
+use-inventory-data = Load from Inventory
+load-material-tree = Load Material Tree
+craftable-amount = Craftable Amount
+unit-pieces = pcs
+total-purchase-cost = Total Purchase Cost
+includes-crystal = incl. Crystal
+cost-per-craft = Cost per Craft
+load-error = Load Error
+no-recipe-id-error = Please select a recipe first
+include-crystal-cost = Include Crystal Cost
+crystal-total = Crystal Total
+crystal-name = Crystal Name
+click-load-to-start = Click "Load Material Tree" to start
+
 # Solvers
 dp-solver = DP
 raphael-solver = Raphael

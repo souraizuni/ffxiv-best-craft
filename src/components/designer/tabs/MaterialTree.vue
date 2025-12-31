@@ -44,12 +44,16 @@ export interface MaterialTreeNode {
     requiredPerCraft: number;           // 每次製作所需數量（製作父材料）
     baseRequiredPerFinalProduct: number; // 每製作一個最終產品所需的材料數量（用於計算可製作數量）
     totalRequired: number;              // 總共需要數量（根據目標製作數量計算）
+    ownedQuantity: number;              // 已擁有數量（可製作材料的現有庫存，用於減少需製作量）
+    ownedUnitPrice: number;             // 已擁有半成品的單價（市場購買價）
+    ownedSubtotal: number;              // 已擁有半成品的小計（已擁有數量 × 單價）
     purchasedQuantity: number;          // 購買數量（使用者輸入的實際購買量）
     unitPrice: number;                  // 單價
     subtotal: number;                   // 小計（購買數量 × 單價）
     recipeId?: number;                  // 若此材料可製作，則有配方 ID
     canCraft: boolean;                  // 是否可以製作
-    expanded: boolean;                  // 是否展開子材料
+    expanded: boolean;                  // 是否展開子材料（展開時才計入成本）
+    childrenLoaded: boolean;            // 子材料是否已載入（用於區分「尚未載入」和「已載入但收合」）
     loading: boolean;                   // 是否正在載入子材料
     children: MaterialTreeNode[];       // 子材料
     depth: number;                      // 樹的深度
@@ -143,7 +147,10 @@ const craftableAmount = computed(() => {
     
     for (const m of baseMaterials) {
         if (m.baseRequiredPerFinalProduct > 0) {
-            const craftable = Math.floor(m.purchasedQuantity / m.baseRequiredPerFinalProduct);
+            // 對於可製作但未展開的材料，有效庫存 = 購買數量 + 已擁有成品數量
+            // 對於不可製作的材料，只計算購買數量
+            const effectiveQuantity = m.purchasedQuantity + (m.canCraft ? m.ownedQuantity : 0);
+            const craftable = Math.floor(effectiveQuantity / m.baseRequiredPerFinalProduct);
             if (craftable < minCraftable) {
                 minCraftable = craftable;
                 materialBottleneckId = m.id;
@@ -293,12 +300,16 @@ async function loadMaterialTree() {
                 requiredPerCraft: ing.amount,
                 baseRequiredPerFinalProduct: ing.amount, // 根節點的基礎需求量就是每次製作的需求量
                 totalRequired: ing.amount * localCraftAmount.value,
+                ownedQuantity: 0,  // 已擁有的成品數量
+                ownedUnitPrice: 0, // 已擁有半成品的單價
+                ownedSubtotal: 0,  // 已擁有半成品的小計
                 purchasedQuantity: inventoryMaterial?.quantity ?? 0,
                 unitPrice: inventoryMaterial?.unitPrice ?? 0,
                 subtotal: 0,
                 recipeId: recipe?.id,
                 canCraft: recipe !== null,
                 expanded: false,
+                childrenLoaded: false,
                 loading: false,
                 children: [],
                 depth: 0,
@@ -356,13 +367,18 @@ async function toggleExpand(node: MaterialTreeNode) {
     if (!node.canCraft || !node.recipeId) return;
 
     if (node.expanded) {
-        // 收合 - 同時移除該節點相關的水晶
+        // 收合 - 保留子材料資料，但不計入成本
         node.expanded = false;
-        node.children = [];
-        // 移除來自此配方的水晶
+        // 移除來自此配方的水晶（收合時水晶不計入）
         removeCrystalsFromRecipe(node.recipeId);
+        // 注意：不清除 node.children，保留已輸入的資料
+    } else if (node.childrenLoaded) {
+        // 已載入過，直接展開並重新加入水晶
+        node.expanded = true;
+        // 重新加入此節點的水晶需求
+        await readdCrystalsForNode(node);
     } else {
-        // 展開
+        // 首次展開，載入子材料
         node.loading = true;
         try {
             const dataSource = await settingsStore.getDataSource();
@@ -388,12 +404,16 @@ async function toggleExpand(node: MaterialTreeNode) {
                     requiredPerCraft: ing.amount,
                     baseRequiredPerFinalProduct: childBaseRequired, // 繼承父節點的比例計算
                     totalRequired: childRequired,
+                    ownedQuantity: 0,  // 已擁有的成品數量
+                    ownedUnitPrice: 0, // 已擁有半成品的單價
+                    ownedSubtotal: 0,  // 已擁有半成品的小計
                     purchasedQuantity: inventoryMaterial?.quantity ?? 0,
                     unitPrice: inventoryMaterial?.unitPrice ?? 0,
                     subtotal: (inventoryMaterial?.quantity ?? 0) * (inventoryMaterial?.unitPrice ?? 0),
                     recipeId: recipe?.id,
                     canCraft: recipe !== null,
                     expanded: false,
+                    childrenLoaded: false,
                     loading: false,
                     children: [],
                     depth: node.depth + 1,
@@ -438,6 +458,7 @@ async function toggleExpand(node: MaterialTreeNode) {
 
             node.children = children;
             node.expanded = true;
+            node.childrenLoaded = true;
         } catch (e) {
             console.error('Failed to expand node:', e);
         } finally {
@@ -445,6 +466,48 @@ async function toggleExpand(node: MaterialTreeNode) {
         }
     }
     recalculateAll();
+}
+
+// 重新加入節點的水晶需求（展開已載入的節點時使用）
+async function readdCrystalsForNode(node: MaterialTreeNode) {
+    if (!node.recipeId) return;
+    
+    try {
+        const dataSource = await settingsStore.getDataSource();
+        const crystals = await fetchCrystals(dataSource, node.recipeId);
+        
+        for (const crystal of crystals) {
+            const itemInfo = await fetchItemInfo(dataSource, crystal.ingredient_id);
+            const crystalBaseRequired = crystal.amount * node.baseRequiredPerFinalProduct;
+            
+            const contribution: CrystalContribution = {
+                recipeId: node.recipeId,
+                materialName: node.name,
+                baseRequiredPerFinalProduct: crystalBaseRequired,
+            };
+            
+            const existingCrystal = crystalData.value.find(c => c.id === itemInfo.id);
+            if (existingCrystal) {
+                existingCrystal.contributions.push(contribution);
+                existingCrystal.baseRequiredPerFinalProduct += crystalBaseRequired;
+                existingCrystal.totalRequired += crystalBaseRequired * localCraftAmount.value;
+            } else {
+                const inventoryCrystal = useInventoryData.value ? materialsInventory.getCrystal(itemInfo.id) : null;
+                crystalData.value.push({
+                    id: itemInfo.id,
+                    name: itemInfo.name,
+                    contributions: [contribution],
+                    baseRequiredPerFinalProduct: crystalBaseRequired,
+                    totalRequired: crystalBaseRequired * localCraftAmount.value,
+                    purchasedQuantity: inventoryCrystal?.quantity ?? 0,
+                    unitPrice: inventoryCrystal?.unitPrice ?? 0,
+                    subtotal: (inventoryCrystal?.quantity ?? 0) * (inventoryCrystal?.unitPrice ?? 0),
+                });
+            }
+        }
+    } catch (e) {
+        console.error('Failed to readd crystals:', e);
+    }
 }
 
 // 移除來自特定配方的水晶（收合時使用）
@@ -464,7 +527,7 @@ function removeCrystalsFromRecipe(recipeId: number) {
 }
 
 // 更新節點數量
-function updateNodeQuantity(node: MaterialTreeNode, field: 'purchasedQuantity' | 'unitPrice', value: number) {
+function updateNodeQuantity(node: MaterialTreeNode, field: 'purchasedQuantity' | 'unitPrice' | 'ownedQuantity' | 'ownedUnitPrice', value: number) {
     node[field] = value;
     recalculateNode(node, localCraftAmount.value);
     recalculateAll();
@@ -490,6 +553,8 @@ function recalculateNode(node: MaterialTreeNode, craftAmount: number) {
     node.totalRequired = node.baseRequiredPerFinalProduct * craftAmount;
     // 計算小計 = 購買數量 × 單價
     node.subtotal = node.purchasedQuantity * node.unitPrice;
+    // 計算已擁有半成品的小計
+    node.ownedSubtotal = node.ownedQuantity * node.ownedUnitPrice;
 
     // 如果有子節點，重新計算子節點
     if (node.expanded && node.children.length > 0) {
@@ -541,11 +606,17 @@ function calculateTotalCost(nodes: MaterialTreeNode[]): number {
     let total = 0;
     for (const node of nodes) {
         if (node.expanded && node.children.length > 0) {
-            // 遞迴計算子材料成本
+            // 展開狀態：遞迴計算子材料成本
             total += calculateTotalCost(node.children);
         } else {
-            // 計算此節點的成本（購買數量 × 單價）
-            total += node.subtotal;
+            // 收合狀態：計算此節點的成本
+            // 對於可製作的材料，成本 = 購買成本 + 已擁有半成品成本
+            // 對於不可製作的材料，成本 = 購買成本
+            if (node.canCraft) {
+                total += node.subtotal + node.ownedSubtotal;
+            } else {
+                total += node.subtotal;
+            }
         }
     }
     return total;
@@ -641,6 +712,9 @@ defineExpose({
             <div class="tree-header-row">
                 <span class="col-name">{{ $t('material-name') }}</span>
                 <span class="col-required">{{ $t('total-required') }}</span>
+                <span class="col-owned-stock">{{ $t('owned-quantity') }}</span>
+                <span class="col-owned-price">{{ $t('owned-unit-price') }}</span>
+                <span class="col-owned-subtotal">{{ $t('owned-subtotal') }}</span>
                 <span class="col-owned">{{ $t('purchased-quantity') }}</span>
                 <span class="col-price">{{ $t('unit-price') }}</span>
                 <span class="col-subtotal">{{ $t('subtotal') }}</span>
@@ -768,6 +842,36 @@ const MaterialTreeNodeVue = defineComponent({
                 ]),
                 // 總需求
                 h('span', { class: 'col-required' }, formatNumber(props.node.totalRequired)),
+                // 已擁有（只對可製作且未展開的材料顯示）
+                h('div', { class: 'col-owned-stock' }, [
+                    props.node.canCraft && !props.node.expanded
+                        ? h(ElInputNumber, {
+                            modelValue: props.node.ownedQuantity,
+                            'onUpdate:modelValue': (val: number) => emit('update-quantity', props.node, 'ownedQuantity', val ?? 0),
+                            min: 0,
+                            size: 'small',
+                            controlsPosition: 'right',
+                        })
+                        : h('span', { class: 'na-text' }, '-'),
+                ]),
+                // 已擁有單價（只對可製作且未展開的材料顯示）
+                h('div', { class: 'col-owned-price' }, [
+                    props.node.canCraft && !props.node.expanded
+                        ? h(ElInputNumber, {
+                            modelValue: props.node.ownedUnitPrice,
+                            'onUpdate:modelValue': (val: number) => emit('update-quantity', props.node, 'ownedUnitPrice', val ?? 0),
+                            min: 0,
+                            size: 'small',
+                            controlsPosition: 'right',
+                        })
+                        : h('span', { class: 'na-text' }, '-'),
+                ]),
+                // 已擁有小計（只對可製作且未展開的材料顯示）
+                h('span', { class: 'col-owned-subtotal' }, 
+                    props.node.canCraft && !props.node.expanded
+                        ? formatNumber(props.node.ownedSubtotal)
+                        : '-'
+                ),
                 // 購買數量
                 h('div', { class: 'col-owned' }, [
                     h(ElInputNumber, {
@@ -872,15 +976,26 @@ const MaterialTreeNodeVue = defineComponent({
 }
 
 :deep(.col-required),
-:deep(.col-subtotal) {
+:deep(.col-subtotal),
+:deep(.col-owned-subtotal) {
     width: 80px;
     text-align: right;
     font-family: 'Consolas', 'Monaco', monospace;
 }
 
 :deep(.col-owned),
+:deep(.col-owned-stock),
+:deep(.col-owned-price),
 :deep(.col-price) {
-    width: 120px;
+    width: 100px;
+}
+
+:deep(.col-owned-stock .na-text),
+:deep(.col-owned-price .na-text),
+:deep(.col-owned-subtotal) {
+    display: block;
+    text-align: center;
+    color: var(--el-text-color-placeholder);
 }
 
 :deep(.expand-btn) {
