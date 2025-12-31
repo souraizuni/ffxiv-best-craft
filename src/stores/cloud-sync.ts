@@ -29,6 +29,7 @@ import useSettingsStore from './settings';
 import useGearsetsStore from './gearsets';
 import useDesignerStore from './designer';
 import useSimulatorCostsStore from './simulator-costs';
+import useMaterialsInventoryStore from './materials-inventory';
 
 export interface SyncStatus {
     lastSyncTime: Date | null;
@@ -73,12 +74,14 @@ export const useCloudSyncStore = defineStore('cloud-sync', () => {
             const gearsetsStore = useGearsetsStore();
             const designerStore = useDesignerStore();
             const simulatorCostsStore = useSimulatorCostsStore();
+            const materialsInventoryStore = useMaterialsInventoryStore();
 
             const data = {
                 settings: settingsStore.toJson,
                 gearsets: gearsetsStore.toJson,
                 designer: designerStore.toJson,
                 simulatorCosts: simulatorCostsStore.toJson,
+                materialsInventory: materialsInventoryStore.toJson(),
                 updatedAt: serverTimestamp(),
             };
 
@@ -118,6 +121,7 @@ export const useCloudSyncStore = defineStore('cloud-sync', () => {
             const gearsetsStore = useGearsetsStore();
             const designerStore = useDesignerStore();
             const simulatorCostsStore = useSimulatorCostsStore();
+            const materialsInventoryStore = useMaterialsInventoryStore();
 
             if (data.settings) {
                 settingsStore.fromJson(data.settings);
@@ -130,6 +134,9 @@ export const useCloudSyncStore = defineStore('cloud-sync', () => {
             }
             if (data.simulatorCosts) {
                 simulatorCostsStore.fromJson(data.simulatorCosts);
+            }
+            if (data.materialsInventory) {
+                materialsInventoryStore.fromJson(data.materialsInventory);
             }
 
             syncStatus.value.lastSyncTime = new Date();
