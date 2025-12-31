@@ -111,7 +111,9 @@ guide = 嚮導
 gearsets = 配裝
 recipe = 配方
 simulator = 模擬
-bom = 清單materials = 材料settings = 設定
+bom = 清單
+materials = 材料
+settings = 設定
 </fluent>
 
 <fluent locale="en-US">
