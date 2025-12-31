@@ -54,14 +54,19 @@ export interface MaterialTreeNode {
     depth: number;                      // 樹的深度
 }
 
+// 水晶貢獻資料結構（追蹤每個配方的貢獻量）
+export interface CrystalContribution {
+    recipeId: number;                   // 來源配方 ID
+    materialName: string;               // 來源材料名稱
+    baseRequiredPerFinalProduct: number; // 此配方貢獻的每個最終產品需求量
+}
+
 // 水晶資料結構
 export interface CrystalData {
     id: number;                         // 水晶 ID
     name: string;                       // 水晶名稱
-    sourceRecipeId: number;             // 來源配方 ID（用於識別水晶屬於哪個材料）
-    sourceMaterialName: string;         // 來源材料名稱（用於顯示）
-    requiredPerCraft: number;           // 每次製作所需數量
-    baseRequiredPerFinalProduct: number; // 每製作一個最終產品所需的水晶數量
+    contributions: CrystalContribution[]; // 各配方的貢獻量（用於收合時正確扣減）
+    baseRequiredPerFinalProduct: number; // 每製作一個最終產品所需的水晶數量（所有貢獻加總）
     totalRequired: number;              // 總共需要數量
     purchasedQuantity: number;          // 購買數量
     unitPrice: number;                  // 單價
@@ -91,6 +96,8 @@ const includeCrystalCost = ref(false); // 是否計入水晶成本
 
 // 瓶頸材料 ID（木桶理論中限制可製作數量的材料）
 const bottleneckMaterialId = ref<number | null>(null);
+// 瓶頸水晶 ID（木桶理論中限制可製作數量的水晶）
+const bottleneckCrystalId = ref<number | null>(null);
 
 // 本地製作數量（可在樹狀檢視中獨立設定）
 const localCraftAmount = ref(props.targetAmount || 1);
@@ -112,6 +119,7 @@ watch(localCraftAmount, () => {
 const craftableAmount = computed(() => {
     if (treeData.value.length === 0) {
         bottleneckMaterialId.value = null;
+        bottleneckCrystalId.value = null;
         return 0;
     }
     
@@ -119,24 +127,42 @@ const craftableAmount = computed(() => {
     const baseMaterials = collectBaseMaterials(treeData.value);
     if (baseMaterials.length === 0) {
         bottleneckMaterialId.value = null;
+        bottleneckCrystalId.value = null;
         return 0;
     }
     
     // 計算每種材料可以製作的數量，並找出瓶頸
     let minCraftable = Infinity;
-    let bottleneckId: number | null = null;
+    let materialBottleneckId: number | null = null;
+    let crystalBottleneckId: number | null = null;
     
     for (const m of baseMaterials) {
         if (m.baseRequiredPerFinalProduct > 0) {
             const craftable = Math.floor(m.purchasedQuantity / m.baseRequiredPerFinalProduct);
             if (craftable < minCraftable) {
                 minCraftable = craftable;
-                bottleneckId = m.id;
+                materialBottleneckId = m.id;
+                crystalBottleneckId = null; // 材料成為瓶頸時，清除水晶瓶頸
             }
         }
     }
     
-    bottleneckMaterialId.value = bottleneckId;
+    // 如果勾選了計入水晶成本，水晶也要參與木桶理論計算
+    if (includeCrystalCost.value) {
+        for (const c of crystalData.value) {
+            if (c.baseRequiredPerFinalProduct > 0) {
+                const craftable = Math.floor(c.purchasedQuantity / c.baseRequiredPerFinalProduct);
+                if (craftable < minCraftable) {
+                    minCraftable = craftable;
+                    crystalBottleneckId = c.id;
+                    materialBottleneckId = null; // 水晶成為瓶頸時，清除材料瓶頸
+                }
+            }
+        }
+    }
+    
+    bottleneckMaterialId.value = materialBottleneckId;
+    bottleneckCrystalId.value = crystalBottleneckId;
     
     if (minCraftable === Infinity) return 0;
     return minCraftable;
@@ -276,19 +302,23 @@ async function loadMaterialTree() {
         const crystalNodes: CrystalData[] = [];
         for (const crystal of crystals) {
             const itemInfo = await fetchItemInfo(dataSource, crystal.ingredient_id);
+            const contribution: CrystalContribution = {
+                recipeId: props.recipeId!,
+                materialName: '主配方',
+                baseRequiredPerFinalProduct: crystal.amount,
+            };
+            
             // 檢查是否已有相同水晶，如有則合併數量
             const existingCrystal = crystalNodes.find(c => c.id === itemInfo.id);
             if (existingCrystal) {
-                existingCrystal.requiredPerCraft += crystal.amount;
+                existingCrystal.contributions.push(contribution);
                 existingCrystal.baseRequiredPerFinalProduct += crystal.amount;
                 existingCrystal.totalRequired += crystal.amount * localCraftAmount.value;
             } else {
                 crystalNodes.push({
                     id: itemInfo.id,
                     name: itemInfo.name,
-                    sourceRecipeId: props.recipeId!,
-                    sourceMaterialName: '主配方',
-                    requiredPerCraft: crystal.amount,
+                    contributions: [contribution],
                     baseRequiredPerFinalProduct: crystal.amount,
                     totalRequired: crystal.amount * localCraftAmount.value,
                     purchasedQuantity: 0,
@@ -362,18 +392,23 @@ async function toggleExpand(node: MaterialTreeNode) {
                 // 計算水晶需求量：每製作一個父材料需要的水晶量 × 每個最終產品需要的父材料量
                 const crystalBaseRequired = crystal.amount * node.baseRequiredPerFinalProduct;
                 
+                const contribution: CrystalContribution = {
+                    recipeId: node.recipeId,
+                    materialName: node.name,
+                    baseRequiredPerFinalProduct: crystalBaseRequired,
+                };
+                
                 // 檢查是否已有相同水晶，如有則合併數量
                 const existingCrystal = crystalData.value.find(c => c.id === itemInfo.id);
                 if (existingCrystal) {
+                    existingCrystal.contributions.push(contribution);
                     existingCrystal.baseRequiredPerFinalProduct += crystalBaseRequired;
                     existingCrystal.totalRequired += crystalBaseRequired * localCraftAmount.value;
                 } else {
                     crystalData.value.push({
                         id: itemInfo.id,
                         name: itemInfo.name,
-                        sourceRecipeId: node.recipeId,
-                        sourceMaterialName: node.name,
-                        requiredPerCraft: crystal.amount,
+                        contributions: [contribution],
                         baseRequiredPerFinalProduct: crystalBaseRequired,
                         totalRequired: crystalBaseRequired * localCraftAmount.value,
                         purchasedQuantity: 0,
@@ -396,13 +431,24 @@ async function toggleExpand(node: MaterialTreeNode) {
 
 // 移除來自特定配方的水晶（收合時使用）
 function removeCrystalsFromRecipe(recipeId: number) {
-    crystalData.value = crystalData.value.filter(c => c.sourceRecipeId !== recipeId);
+    // 遍歷所有水晶，移除此配方的貢獻
+    for (const crystal of crystalData.value) {
+        const contributionIndex = crystal.contributions.findIndex(c => c.recipeId === recipeId);
+        if (contributionIndex !== -1) {
+            const contribution = crystal.contributions[contributionIndex];
+            crystal.baseRequiredPerFinalProduct -= contribution.baseRequiredPerFinalProduct;
+            crystal.totalRequired = crystal.baseRequiredPerFinalProduct * localCraftAmount.value;
+            crystal.contributions.splice(contributionIndex, 1);
+        }
+    }
+    // 移除沒有任何貢獻的水晶
+    crystalData.value = crystalData.value.filter(c => c.contributions.length > 0);
 }
 
 // 更新節點數量
 function updateNodeQuantity(node: MaterialTreeNode, field: 'purchasedQuantity' | 'unitPrice', value: number) {
     node[field] = value;
-    recalculateNode(node);
+    recalculateNode(node, localCraftAmount.value);
     recalculateAll();
 }
 
@@ -410,17 +456,27 @@ function updateNodeQuantity(node: MaterialTreeNode, field: 'purchasedQuantity' |
 function updateCrystalQuantity(crystal: CrystalData, field: 'purchasedQuantity' | 'unitPrice', value: number) {
     crystal[field] = value;
     crystal.subtotal = crystal.purchasedQuantity * crystal.unitPrice;
+    // 水晶也參與木桶理論計算，需要觸發重新計算
+    // 注意：craftableAmount 是 computed，會自動回應 crystalData 的變化
 }
 
+// 監聽「計入水晶成本」的變化
+watch(includeCrystalCost, () => {
+    // 觸發重新計算，讓 craftableAmount 重新計算瓶頸
+    // computed 會自動回應，但需要觸發一次依賴
+});
+
 // 重新計算單一節點
-function recalculateNode(node: MaterialTreeNode) {
+function recalculateNode(node: MaterialTreeNode, craftAmount: number) {
+    // 更新總需求量
+    node.totalRequired = node.baseRequiredPerFinalProduct * craftAmount;
     // 計算小計 = 購買數量 × 單價
     node.subtotal = node.purchasedQuantity * node.unitPrice;
 
     // 如果有子節點，重新計算子節點
     if (node.expanded && node.children.length > 0) {
         for (const child of node.children) {
-            recalculateNode(child);
+            recalculateNode(child, craftAmount);
         }
     }
 }
@@ -429,13 +485,12 @@ function recalculateNode(node: MaterialTreeNode) {
 function recalculateAll() {
     // 重新計算各節點的需求量和小計
     for (const node of treeData.value) {
-        node.totalRequired = node.requiredPerCraft * localCraftAmount.value;
-        recalculateNode(node);
+        recalculateNode(node, localCraftAmount.value);
     }
 
-    // 重新計算水晶需求量
+    // 重新計算水晶需求量（使用 baseRequiredPerFinalProduct 正確計算總需求）
     for (const crystal of crystalData.value) {
-        crystal.totalRequired = crystal.requiredPerCraft * localCraftAmount.value;
+        crystal.totalRequired = crystal.baseRequiredPerFinalProduct * localCraftAmount.value;
         crystal.subtotal = crystal.purchasedQuantity * crystal.unitPrice;
     }
 
@@ -604,10 +659,13 @@ defineExpose({
                 </div>
                 
                 <!-- 水晶列表 -->
-                <div v-for="crystal in crystalData" :key="crystal.id" class="crystal-row">
+                <div v-for="crystal in crystalData" :key="crystal.id" 
+                    class="crystal-row"
+                    :class="{ 'bottleneck': includeCrystalCost && bottleneckCrystalId === crystal.id }">
                     <span class="col-name">
                         <span class="crystal-icon">💎</span>
                         {{ crystal.name }}
+                        <el-tag v-if="includeCrystalCost && bottleneckCrystalId === crystal.id" size="small" type="danger">🪣 瓶頸</el-tag>
                     </span>
                     <span class="col-required">{{ formatNumber(crystal.totalRequired) }}</span>
                     <div class="col-owned">
@@ -963,6 +1021,11 @@ const MaterialTreeNodeVue = defineComponent({
     align-items: center;
     padding: 8px 12px;
     border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.crystal-row.bottleneck {
+    background: var(--el-color-danger-light-9);
+    border-left: 3px solid var(--el-color-danger);
 }
 
 .crystal-row:last-child {
