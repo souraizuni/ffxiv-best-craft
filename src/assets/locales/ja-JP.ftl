@@ -110,12 +110,13 @@ bill-of-material = 材料リスト
 # Material Tree
 material-name = 材料名
 total-required = 必要数
+use-stock = 在庫使用
 owned-quantity = 所持数
 owned-cost = 所持コスト
-need-to-buy = 購入必要
+still-needed = 不足数
+purchase-quantity = 購入数
 unit-price = 単価
 purchase-cost = 購入コスト
-total-cost = 総コスト
 craft-amount = 製作数
 use-inventory-data = 在庫から読込
 load-material-tree = 材料ツリー読込

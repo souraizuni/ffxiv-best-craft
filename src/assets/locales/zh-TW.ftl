@@ -192,12 +192,13 @@ settings = 設定
 # Material Tree
 material-name = 材料名稱
 total-required = 總需求
+use-stock = 使用庫存
 owned-quantity = 已擁有
 owned-cost = 已有成本
-need-to-buy = 還需購買
+still-needed = 還需數量
+purchase-quantity = 購買數量
 unit-price = 單價
 purchase-cost = 購買成本
-total-cost = 總成本
 craft-amount = 製作數量
 use-inventory-data = 從材料庫存帶入
 load-material-tree = 載入材料樹

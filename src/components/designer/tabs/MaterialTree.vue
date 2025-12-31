@@ -44,16 +44,20 @@ export interface MaterialTreeNode {
     requiredPerCraft: number;           // 每次製作所需數量（製作父材料）
     baseRequiredPerFinalProduct: number; // 每製作一個最終產品所需的材料數量（用於計算可製作數量）
     totalRequired: number;              // 總共需要數量（根據目標製作數量計算）
+    // 庫存相關
+    useStock: boolean;                  // 是否使用庫存（勾選時可輸入已擁有數量和成本）
     ownedQuantity: number;              // 已擁有數量（手上現有的庫存）
-    ownedCost: number;                  // 已擁有成本（這些庫存的總取得成本，直接輸入總額）
-    needToBuy: number;                  // 還需購買數量（計算值：總需求 - 已擁有，最小為 0）
-    unitPrice: number;                  // 購買單價（市場價格）
-    purchaseCost: number;               // 購買成本（計算值：還需購買 × 單價）
-    totalCost: number;                  // 總成本（計算值：已擁有成本 + 購買成本）
+    ownedCost: number;                  // 已擁有成本（這些庫存的取得成本）
+    stillNeeded: number;                // 還需數量（計算值：總需求 - 已擁有）
+    // 購買相關（收合時使用）
+    purchaseQuantity: number;           // 購買數量
+    unitPrice: number;                  // 購買單價
+    purchaseCost: number;               // 購買成本（購買數量 × 單價）
+    // 製作樹相關
     recipeId?: number;                  // 若此材料可製作，則有配方 ID
     canCraft: boolean;                  // 是否可以製作
-    expanded: boolean;                  // 是否展開子材料（展開時才計入成本）
-    childrenLoaded: boolean;            // 子材料是否已載入（用於區分「尚未載入」和「已載入但收合」）
+    expanded: boolean;                  // 是否展開子材料
+    childrenLoaded: boolean;            // 子材料是否已載入
     loading: boolean;                   // 是否正在載入子材料
     children: MaterialTreeNode[];       // 子材料
     depth: number;                      // 樹的深度
@@ -147,8 +151,9 @@ const craftableAmount = computed(() => {
     
     for (const m of baseMaterials) {
         if (m.baseRequiredPerFinalProduct > 0) {
-            // 有效庫存 = 已擁有數量（木桶理論只看實際擁有多少）
-            const craftable = Math.floor(m.ownedQuantity / m.baseRequiredPerFinalProduct);
+            // 有效庫存 = 使用庫存時的已擁有數量 + 購買數量
+            const effectiveStock = (m.useStock ? m.ownedQuantity : 0) + m.purchaseQuantity;
+            const craftable = Math.floor(effectiveStock / m.baseRequiredPerFinalProduct);
             if (craftable < minCraftable) {
                 minCraftable = craftable;
                 materialBottleneckId = m.id;
@@ -295,8 +300,7 @@ async function loadMaterialTree() {
             const totalReq = ing.amount * localCraftAmount.value;
             const ownedQty = inventoryMaterial?.quantity ?? 0;
             const price = inventoryMaterial?.unitPrice ?? 0;
-            const needBuy = Math.max(0, totalReq - ownedQty);
-            const purchCost = needBuy * price;
+            const stillNeeded = Math.max(0, totalReq - ownedQty);
 
             const node: MaterialTreeNode = {
                 id: itemInfo.id,
@@ -304,12 +308,15 @@ async function loadMaterialTree() {
                 requiredPerCraft: ing.amount,
                 baseRequiredPerFinalProduct: ing.amount, // 根節點的基礎需求量就是每次製作的需求量
                 totalRequired: totalReq,
-                ownedQuantity: ownedQty,  // 已擁有的數量
-                ownedCost: 0,             // 已擁有的總成本（使用者輸入）
-                needToBuy: needBuy,       // 還需購買
-                unitPrice: price,         // 購買單價
-                purchaseCost: purchCost,  // 購買成本
-                totalCost: purchCost,     // 總成本 = 已擁有成本 + 購買成本
+                // 庫存相關
+                useStock: false,              // 預設不使用庫存
+                ownedQuantity: 0,             // 已擁有的數量
+                ownedCost: 0,                 // 已擁有的成本
+                stillNeeded: totalReq,        // 還需數量（預設等於總需求）
+                // 購買相關
+                purchaseQuantity: totalReq,   // 購買數量
+                unitPrice: price,             // 購買單價
+                purchaseCost: totalReq * price, // 購買成本
                 recipeId: recipe?.id,
                 canCraft: recipe !== null,
                 expanded: false,
@@ -393,18 +400,16 @@ async function toggleExpand(node: MaterialTreeNode) {
                 const itemInfo = await fetchItemInfo(dataSource, ing.ingredient_id);
                 const recipe = await findRecipeByItemId(dataSource, itemInfo.id, itemInfo.name);
 
-                // 計算子材料需要的數量
-                const childRequired = ing.amount * node.baseRequiredPerFinalProduct * localCraftAmount.value;
+                // 計算子材料需要的數量（根據父節點的 stillNeeded）
+                // 父節點還需製作的數量 × 每次製作需要的子材料數量
+                const childRequired = ing.amount * node.stillNeeded;
                 // 計算每製作一個最終產品所需的此材料數量（用於可製作數量計算）
                 const childBaseRequired = ing.amount * node.baseRequiredPerFinalProduct;
 
                 // 從材料庫存取得預設值
                 const inventoryMaterial = useInventoryData.value ? materialsInventory.getMaterial(itemInfo.id) : null;
 
-                const ownedQty = inventoryMaterial?.quantity ?? 0;
                 const price = inventoryMaterial?.unitPrice ?? 0;
-                const needBuy = Math.max(0, childRequired - ownedQty);
-                const purchCost = needBuy * price;
 
                 const childNode: MaterialTreeNode = {
                     id: itemInfo.id,
@@ -412,12 +417,15 @@ async function toggleExpand(node: MaterialTreeNode) {
                     requiredPerCraft: ing.amount,
                     baseRequiredPerFinalProduct: childBaseRequired, // 繼承父節點的比例計算
                     totalRequired: childRequired,
-                    ownedQuantity: ownedQty,  // 已擁有的數量
-                    ownedCost: 0,             // 已擁有的總成本（使用者輸入）
-                    needToBuy: needBuy,       // 還需購買
-                    unitPrice: price,         // 購買單價
-                    purchaseCost: purchCost,  // 購買成本
-                    totalCost: purchCost,     // 總成本
+                    // 庫存相關
+                    useStock: false,              // 預設不使用庫存
+                    ownedQuantity: 0,             // 已擁有的數量
+                    ownedCost: 0,                 // 已擁有的成本
+                    stillNeeded: childRequired,   // 還需數量（預設不使用庫存，所以等於 totalRequired）
+                    // 購買相關
+                    purchaseQuantity: childRequired, // 購買數量
+                    unitPrice: price,             // 購買單價
+                    purchaseCost: childRequired * price, // 購買成本
                     recipeId: recipe?.id,
                     canCraft: recipe !== null,
                     expanded: false,
@@ -535,9 +543,10 @@ function removeCrystalsFromRecipe(recipeId: number) {
 }
 
 // 更新節點數量
-function updateNodeQuantity(node: MaterialTreeNode, field: 'ownedQuantity' | 'ownedCost' | 'unitPrice', value: number) {
-    node[field] = value;
-    recalculateNode(node, localCraftAmount.value);
+function updateNodeQuantity(node: MaterialTreeNode, field: 'useStock' | 'ownedQuantity' | 'ownedCost' | 'purchaseQuantity' | 'unitPrice', value: number | boolean) {
+    (node as Record<string, unknown>)[field] = value;
+    // 直接呼叫 recalculateAll 從根節點重新計算整棵樹
+    // 不需要單獨呼叫 recalculateNode，因為 recalculateAll 會正確處理父子關係
     recalculateAll();
 }
 
@@ -555,21 +564,34 @@ watch(includeCrystalCost, () => {
     // computed 會自動回應，但需要觸發一次依賴
 });
 
-// 重新計算單一節點
-function recalculateNode(node: MaterialTreeNode, craftAmount: number) {
-    // 更新總需求量
-    node.totalRequired = node.baseRequiredPerFinalProduct * craftAmount;
-    // 計算還需購買數量 = 總需求 - 已擁有（最小為 0）
-    node.needToBuy = Math.max(0, node.totalRequired - node.ownedQuantity);
-    // 計算購買成本 = 還需購買 × 單價
-    node.purchaseCost = node.needToBuy * node.unitPrice;
-    // 計算總成本 = 已擁有成本 + 購買成本
-    node.totalCost = node.ownedCost + node.purchaseCost;
+// 重新計算單一節點（parentStillNeeded 是父節點還需製作的數量，用於子節點計算）
+function recalculateNode(node: MaterialTreeNode, craftAmount: number, parentStillNeeded?: number) {
+    // 計算總需求量
+    // 如果有 parentStillNeeded，表示這是子節點，需要根據父節點還需的數量來計算
+    if (parentStillNeeded !== undefined) {
+        // 子節點：總需求 = 每次製作需要的數量 × 父節點還需製作的數量
+        node.totalRequired = node.requiredPerCraft * parentStillNeeded;
+    } else {
+        // 根節點：總需求 = baseRequiredPerFinalProduct × 製作數量
+        node.totalRequired = node.baseRequiredPerFinalProduct * craftAmount;
+    }
+    
+    // 根據是否使用庫存計算還需數量
+    if (node.useStock) {
+        // 使用庫存：還需數量 = 總需求 - 已擁有（最小為 0）
+        node.stillNeeded = Math.max(0, node.totalRequired - node.ownedQuantity);
+    } else {
+        // 不使用庫存：還需數量 = 總需求
+        node.stillNeeded = node.totalRequired;
+    }
+    
+    // 計算購買成本 = 購買數量 × 單價
+    node.purchaseCost = node.purchaseQuantity * node.unitPrice;
 
-    // 如果有子節點，重新計算子節點
+    // 如果有子節點，重新計算子節點（傳遞此節點的 stillNeeded）
     if (node.expanded && node.children.length > 0) {
         for (const child of node.children) {
-            recalculateNode(child, craftAmount);
+            recalculateNode(child, craftAmount, node.stillNeeded);
         }
     }
 }
@@ -616,11 +638,17 @@ function calculateTotalCost(nodes: MaterialTreeNode[]): number {
     let total = 0;
     for (const node of nodes) {
         if (node.expanded && node.children.length > 0) {
-            // 展開狀態：遞迴計算子材料成本
+            // 展開狀態：計算庫存成本（如有）+ 子材料成本
+            if (node.useStock) {
+                total += node.ownedCost; // 加上庫存成本
+            }
             total += calculateTotalCost(node.children);
         } else {
-            // 收合狀態：計算此節點的總成本（已擁有成本 + 購買成本）
-            total += node.totalCost;
+            // 收合狀態：計算庫存成本（如有）+ 購買成本
+            if (node.useStock) {
+                total += node.ownedCost; // 加上庫存成本
+            }
+            total += node.purchaseCost;
         }
     }
     return total;
@@ -716,12 +744,13 @@ defineExpose({
             <div class="tree-header-row">
                 <span class="col-name">{{ $t('material-name') }}</span>
                 <span class="col-required">{{ $t('total-required') }}</span>
+                <span class="col-use-stock">{{ $t('use-stock') }}</span>
                 <span class="col-owned-stock">{{ $t('owned-quantity') }}</span>
                 <span class="col-owned-cost">{{ $t('owned-cost') }}</span>
-                <span class="col-need-buy">{{ $t('need-to-buy') }}</span>
+                <span class="col-still-needed">{{ $t('still-needed') }}</span>
+                <span class="col-purchase-qty">{{ $t('purchase-quantity') }}</span>
                 <span class="col-price">{{ $t('unit-price') }}</span>
                 <span class="col-purchase-cost">{{ $t('purchase-cost') }}</span>
-                <span class="col-total-cost">{{ $t('total-cost') }}</span>
             </div>
 
             <!-- 遞迴渲染樹節點 -->
@@ -846,7 +875,15 @@ const MaterialTreeNodeVue = defineComponent({
                 ]),
                 // 總需求
                 h('span', { class: 'col-required' }, formatNumber(props.node.totalRequired)),
-                // 已擁有數量
+                // 使用庫存（checkbox）
+                h('div', { class: 'col-use-stock' }, [
+                    h(ElCheckbox, {
+                        modelValue: props.node.useStock,
+                        'onUpdate:modelValue': (val: boolean) => emit('update-quantity', props.node, 'useStock', val),
+                        size: 'small',
+                    }),
+                ]),
+                // 已擁有數量（僅當 useStock 時可編輯）
                 h('div', { class: 'col-owned-stock' }, [
                     h(ElInputNumber, {
                         modelValue: props.node.ownedQuantity,
@@ -854,9 +891,10 @@ const MaterialTreeNodeVue = defineComponent({
                         min: 0,
                         size: 'small',
                         controlsPosition: 'right',
+                        disabled: !props.node.useStock,
                     }),
                 ]),
-                // 已擁有成本（直接輸入總額）
+                // 已有成本（僅當 useStock 時可編輯）
                 h('div', { class: 'col-owned-cost' }, [
                     h(ElInputNumber, {
                         modelValue: props.node.ownedCost,
@@ -864,10 +902,21 @@ const MaterialTreeNodeVue = defineComponent({
                         min: 0,
                         size: 'small',
                         controlsPosition: 'right',
+                        disabled: !props.node.useStock,
                     }),
                 ]),
-                // 還需購買（計算值）
-                h('span', { class: 'col-need-buy' }, formatNumber(props.node.needToBuy)),
+                // 還需數量（計算值）
+                h('span', { class: 'col-still-needed' }, formatNumber(props.node.stillNeeded)),
+                // 購買數量
+                h('div', { class: 'col-purchase-qty' }, [
+                    h(ElInputNumber, {
+                        modelValue: props.node.purchaseQuantity,
+                        'onUpdate:modelValue': (val: number) => emit('update-quantity', props.node, 'purchaseQuantity', val ?? 0),
+                        min: 0,
+                        size: 'small',
+                        controlsPosition: 'right',
+                    }),
+                ]),
                 // 購買單價
                 h('div', { class: 'col-price' }, [
                     h(ElInputNumber, {
@@ -880,8 +929,6 @@ const MaterialTreeNodeVue = defineComponent({
                 ]),
                 // 購買成本（計算值）
                 h('span', { class: 'col-purchase-cost' }, formatNumber(props.node.purchaseCost)),
-                // 總成本（計算值）
-                h('span', { class: 'col-total-cost' }, formatNumber(props.node.totalCost)),
             ]),
             // 子節點
             props.node.expanded && props.node.children.length > 0
@@ -931,6 +978,32 @@ const MaterialTreeNodeVue = defineComponent({
     border-bottom: 1px solid var(--el-border-color);
 }
 
+/* 表頭欄位寬度設定 */
+.tree-header-row .col-name {
+    flex: 1;
+    min-width: 200px;
+}
+
+.tree-header-row .col-required,
+.tree-header-row .col-still-needed,
+.tree-header-row .col-purchase-cost {
+    width: 80px;
+    text-align: right;
+}
+
+.tree-header-row .col-use-stock {
+    width: 60px;
+    text-align: center;
+}
+
+.tree-header-row .col-owned-stock,
+.tree-header-row .col-owned-cost,
+.tree-header-row .col-purchase-qty,
+.tree-header-row .col-price {
+    width: 100px;
+    text-align: center;
+}
+
 /* 使用 :deep() 讓 scoped 樣式能套用到 defineComponent 渲染的子元件 */
 :deep(.tree-node-wrapper) {
     border-bottom: 1px solid var(--el-border-color-lighter);
@@ -964,23 +1037,21 @@ const MaterialTreeNodeVue = defineComponent({
 }
 
 :deep(.col-required),
-:deep(.col-subtotal),
-:deep(.col-owned-subtotal) {
+:deep(.col-still-needed),
+:deep(.col-purchase-cost) {
     width: 80px;
     text-align: right;
     font-family: 'Consolas', 'Monaco', monospace;
 }
 
-:deep(.col-need-buy),
-:deep(.col-purchase-cost),
-:deep(.col-total-cost) {
-    width: 80px;
-    text-align: right;
-    font-family: 'Consolas', 'Monaco', monospace;
+:deep(.col-use-stock) {
+    width: 60px;
+    text-align: center;
 }
 
 :deep(.col-owned-stock),
 :deep(.col-owned-cost),
+:deep(.col-purchase-qty),
 :deep(.col-price) {
     width: 100px;
 }

@@ -193,12 +193,13 @@ settings = 设置
 # Material Tree
 material-name = 材料名称
 total-required = 总需求
+use-stock = 使用库存
 owned-quantity = 已拥有
 owned-cost = 已有成本
-need-to-buy = 还需购买
+still-needed = 还需数量
+purchase-quantity = 购买数量
 unit-price = 单价
 purchase-cost = 购买成本
-total-cost = 总成本
 craft-amount = 制作数量
 use-inventory-data = 从材料库存带入
 load-material-tree = 加载材料树

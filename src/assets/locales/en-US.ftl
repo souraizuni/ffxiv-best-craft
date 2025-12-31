@@ -154,12 +154,13 @@ title = { $recipe } (Simulator Mode)
 # Material Tree
 material-name = Material Name
 total-required = Total Required
+use-stock = Use Stock
 owned-quantity = Owned
 owned-cost = Owned Cost
-need-to-buy = Need to Buy
+still-needed = Still Needed
+purchase-quantity = Purchase Qty
 unit-price = Unit Price
 purchase-cost = Purchase Cost
-total-cost = Total Cost
 craft-amount = Craft Amount
 use-inventory-data = Load from Inventory
 load-material-tree = Load Material Tree
